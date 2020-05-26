@@ -10,6 +10,7 @@ from robust_statistics_simulator.make_widgets import \
 
 population_widget_dict = make_population_widgets()
 sampling_distribution_widgets=make_sampling_distribution_widgets()
+comparison_widgets=make_comparison_widgets()
 
 def make_pdf(param, shape):
     
@@ -172,3 +173,59 @@ def make_sampling_distribution_chart(sample):
 
     return c.interactive()
 
+def comparisons():
+
+    output = comparison_widgets['output']
+    button = comparison_widgets['button']
+
+    button.on_click(comparison_button_callback)
+    #comps_vbox = VBox([button, output])
+    #display(comps_vbox)
+    #comps_vbox = VBox([dropdown, slider, button, label])
+    display(HBox([button, output]))
+
+def comparison_button_callback(widget_info):
+
+    output = comparison_widgets['output']
+
+    sample_size=30
+    dists=['normal', 'lognormal', 'contaminated chi-squared']
+    estimators=[({'name': 'mean', 'func': np.mean}),
+                ({'name': 'trim_mean', 'func': trim_mean, 'args': .2}),
+                ({'name': 'median', 'func': np.median}),
+                ({'name': 'one-step', 'func': np.mean}),
+                ] # ({'name': 'variance', 'func': np.var})
+
+    params=[1,1,.1]
+    results=[]
+
+    with output:
+        clear_output(wait=True)
+
+        for param, dist in zip(params, dists):
+            for est in estimators:
+                sample = []
+                for i in range(1000):
+                    data = generate_random_data_from_dist(param, dist, sample_size)
+                    est_val=est['func'](data) if not est.get('args') else \
+                        est['func'](data, est['args'])
+
+                    sample.append(est_val)
+
+                results.append({'dist': dist, 'est': est['name'], 'se': np.std(sample, ddof=1)})
+
+        display(make_comparison_chart(results))
+
+
+def make_comparison_chart(results):
+
+    df = pd.DataFrame(results)
+
+    c=alt.Chart(df).mark_bar(tooltip=True, size=30).encode(
+        y=alt.Y('est', title='Estimator', axis=alt.Axis(titleFontSize=15, labelFontSize=12)),
+        x=alt.X('se', title='Standard error', axis=alt.Axis(titleFontSize=15, labelFontSize=12)),
+        color=alt.Color('dist', title='Population shape', legend=alt.Legend(labelFontSize=12, titleFontSize=15))
+    ).properties(height=300)
+
+
+    return c.interactive()

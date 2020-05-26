@@ -39,10 +39,13 @@ def make_sampling_distribution_widgets():
 
     return {'output': output, 'slider': slider, 'dropdown': dropdown, 'button': button, 'label': label}
 
-
 def make_comparison_widgets():
-    pass
 
+    output = Output()
+    button = widgets.Button(description="run comparisons")
+    button.layout = {'width': 'auto'}
+
+    return {'output': output, 'button': button}
 
 
 
