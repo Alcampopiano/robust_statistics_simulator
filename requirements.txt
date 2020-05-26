@@ -4,3 +4,4 @@ numpy
 ipywidgets
 altair
 jupyterlab
+ipython
