@@ -4,13 +4,15 @@ import numpy as np
 from IPython.display import clear_output, display
 from ipywidgets import VBox, HBox
 import ipywidgets
-from scipy.stats import lognorm, norm, chi2, trim_mean, gaussian_kde
+from scipy.stats import lognorm, norm, chi2, trim_mean, gaussian_kde, t
 from robust_statistics_simulator.make_widgets import \
-    make_population_widgets, make_sampling_distribution_widgets, make_comparison_widgets
+    make_population_widgets, make_sampling_distribution_widgets, \
+    make_comparison_widgets, make_sampling_distribution_of_t_widgets
 
 population_widget_dict = make_population_widgets()
 sampling_distribution_widgets=make_sampling_distribution_widgets()
 comparison_widgets=make_comparison_widgets()
+t_sampling_distribution_widgets=make_sampling_distribution_of_t_widgets()
 
 def make_pdf(param, shape):
     
@@ -37,7 +39,13 @@ def make_pdf(param, shape):
         y=kernel.pdf(x)
 
         df = pd.DataFrame({'data': x, 'density': y})
-        
+
+    elif shape=='t':
+
+        x = np.linspace(t.ppf(0.01, param), t.ppf(0.99, param), 1000)
+        y = t.pdf(x, param)
+        df = pd.DataFrame({'data': x, 'density': y})
+
     return df
 
 def make_population_chart(df):
@@ -143,7 +151,6 @@ def sampling_distribution_button_callback(widget_info):
 
 def generate_random_data_from_dist(param, shape, size):
 
-
     if shape=='normal':
        data = norm.rvs(0, param, size=size)
 
@@ -216,7 +223,6 @@ def comparison_button_callback(widget_info):
 
         display(make_comparison_chart(results))
 
-
 def make_comparison_chart(results):
 
     df = pd.DataFrame(results)
@@ -229,3 +235,85 @@ def make_comparison_chart(results):
 
 
     return c.interactive()
+
+def t_sampling_distribution():
+
+    slider = t_sampling_distribution_widgets['slider']
+    output = t_sampling_distribution_widgets['output']
+    button = t_sampling_distribution_widgets['button']
+
+    button.on_click(t_sampling_distribution_button_callback)
+    comps_vbox = VBox([slider, button])
+    display(HBox([comps_vbox, output]))
+
+def t_sampling_distribution_button_callback(widget_info):
+
+    population_dropdown = population_widget_dict['dropdown']
+    sample_slider = t_sampling_distribution_widgets['slider']
+    population_slider = population_widget_dict['slider']
+    output = t_sampling_distribution_widgets['output']
+
+    mu=get_population_average_estimate(population_slider.value,
+                population_dropdown.value)
+
+    with output:
+        clear_output(wait=True)
+
+        sample=[]
+        for i in range(1000):
+            data = generate_random_data_from_dist(population_slider.value,
+                        population_dropdown.value, sample_slider.value)
+
+            est=(np.sqrt(sample_slider.value)*(np.mean(data)-mu))/np.std(data, ddof=1)
+            sample.append(est)
+
+        display(make_sampling_distribution_of_t_chart(sample))
+        #print(sample[:20])
+
+def make_sampling_distribution_of_t_chart(sample):
+
+    sample_slider = t_sampling_distribution_widgets['slider']
+    freedom=sample_slider.value-1
+    df_assumed = make_pdf(freedom, 't')
+    df_actual=pd.DataFrame({'actual': sample})
+
+    actual=alt.Chart(df_actual).transform_density('actual',
+            as_=['actual', 'density']).mark_line().encode(
+        x=alt.X('actual', title='T',
+                axis=alt.Axis(titleFontSize=15)),
+        y=alt.Y('density:Q', axis=alt.Axis(titleFontSize=15)),
+    )
+
+    assumed=alt.Chart(df_assumed).mark_line(color='red').encode(
+        x=alt.X('data', title='T',
+                axis=alt.Axis(titleFontSize=15)),
+        y=alt.Y('density', axis=alt.Axis(titleFontSize=15)),
+    )
+
+    c=alt.layer(actual, assumed)
+
+    return c.interactive()
+
+def get_population_average_estimate(param, shape):
+
+    size=100000
+
+    if shape=='normal':
+        mu=0
+
+    elif shape=='lognormal':
+        mu = lognorm.stats(param, moments='m')
+
+    elif shape=='contaminated chi-squared':
+
+        ### this should be the building of the whole contaminated population
+        # then sample from it.
+        # should this be outside of this function or is there a mathematical equivalent to doing it like this
+        data = chi2.rvs(4, size=size)
+        contam_inds=np.random.randint(size, size=int(param*size))
+        data[contam_inds] *= 10
+        mu=np.mean(data)
+
+    return mu
+
+

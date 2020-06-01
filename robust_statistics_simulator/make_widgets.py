@@ -47,5 +47,14 @@ def make_comparison_widgets():
 
     return {'output': output, 'button': button}
 
+def make_sampling_distribution_of_t_widgets():
 
+    output = Output()
+
+    slider = widgets.IntSlider(min=1, max=300, step=1, value=30, description='Sample size')
+
+    button = widgets.Button(description="run simulation")
+    button.layout = {'width': 'auto'}
+
+    return {'output': output, 'slider': slider, 'button': button}
 
