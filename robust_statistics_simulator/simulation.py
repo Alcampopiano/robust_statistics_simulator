@@ -4,15 +4,18 @@ import numpy as np
 from IPython.display import clear_output, display
 from ipywidgets import VBox, HBox
 import ipywidgets
+from scipy.stats.mstats import winsorize
 from scipy.stats import lognorm, norm, chi2, trim_mean, gaussian_kde, t
 from robust_statistics_simulator.make_widgets import \
     make_population_widgets, make_sampling_distribution_widgets, \
-    make_comparison_widgets, make_sampling_distribution_of_t_widgets
+    make_comparison_widgets, make_sampling_distribution_of_t_widgets, \
+    make_type_I_error_widgets
 
 population_widget_dict = make_population_widgets()
 sampling_distribution_widgets=make_sampling_distribution_widgets()
 comparison_widgets=make_comparison_widgets()
 t_sampling_distribution_widgets=make_sampling_distribution_of_t_widgets()
+type_I_error_widgets=make_type_I_error_widgets()
 
 def make_pdf(param, shape):
     
@@ -316,4 +319,163 @@ def get_population_average_estimate(param, shape):
 
     return mu
 
+def type_I_error():
 
+    slider = type_I_error_widgets['slider']
+    output = type_I_error_widgets['output']
+    button = type_I_error_widgets['button']
+
+    button.on_click(type_I_error_button_callback)
+    comps_vbox = VBox([slider, button])
+    display(HBox([comps_vbox, output]))
+
+def type_I_error_button_callback(widget_info):
+
+    dropdown = population_widget_dict['dropdown']
+    output = type_I_error_widgets['output']
+    dists = dropdown.options
+    params = [1, 1, .1]
+
+    results = []
+    with output:
+        clear_output(wait=True)
+
+        for param, dist in zip(params, dists):
+            error_rate=simulate_t_type_I_error(param, dist)
+            results.append({'dist': dist, 'error': error_rate, 'test': 't'})
+
+        for param, dist in zip(params, dists):
+            error_rate = simulate_tt_type_I_error(param, dist)
+            results.append({'dist': dist, 'error': error_rate, 'test': 'tt'})
+
+        for param, dist in zip(params, dists):
+            error_rate = simulate_pb_type_I_error(param, dist)
+            results.append({'dist': dist, 'error': error_rate, 'test': 'pb'})
+
+        display(make_type_I_error_chart(results))
+        #print(results)
+
+def simulate_t_type_I_error(param, dist):
+
+    nsamples=10000
+    mu = get_population_average_estimate(param, dist)
+    slider = type_I_error_widgets['slider']
+
+    tvals=[]
+    for _ in range(nsamples):
+
+        data = generate_random_data_from_dist(param, dist, slider.value)
+        tval = (np.sqrt(slider.value) * (np.mean(data) - mu)) / np.std(data, ddof=1)
+        tvals.append(tval)
+
+    t_crit = t.ppf(.975, slider.value - 1)
+    prob = (np.sum(tvals < -t_crit) + np.sum(tvals > t_crit)) / len(tvals)
+
+    return prob
+
+def simulate_pb_type_I_error(param, dist):
+
+    slider = type_I_error_widgets['slider']
+    nboot = 599
+    bools = []
+    mu = get_trimmed_mu_estimate(param, dist)
+
+    for _ in range(1000):
+        effects = []
+        data = generate_random_data_from_dist(param, dist, slider.value)
+
+        for _ in range(nboot):
+            bdat = np.random.choice(data, slider.value)
+            effects.append(trim_mean(bdat, .2) - mu)
+
+        l = round(.05 * nboot / 2) - 1
+        u = nboot - l - 2
+        up = sorted(effects)[u]
+        low = sorted(effects)[l]
+        bools.append((low < 0 < up))
+
+    prob = 1 - (np.sum(bools) / len(bools))
+
+    return prob
+
+def simulate_tt_type_I_error(param, dist):
+
+    nsamples=10000
+    crit_nsamples=100000
+    n = type_I_error_widgets['slider'].value
+    g=int(.2*n)
+    df = n - 2 * g - 1
+    ts=np.sort(t.rvs(df, size=crit_nsamples))
+    l = round(.05 * crit_nsamples / 2) - 1
+    u = crit_nsamples - l - 2
+    up = ts[u]
+    low = ts[l]
+
+    mu = get_trimmed_mu_estimate(param, dist)
+
+    bools=[]
+    for _ in range(nsamples):
+
+        data = generate_random_data_from_dist(param, dist, n)
+        t_stat=(1-2*.2)*np.sqrt(n)*(trim_mean(data, .2) - mu) / np.sqrt(winvar(data))
+        bools.append((t_stat < low or t_stat > up))
+
+
+    prob = np.sum(bools) / len(bools)
+
+    return prob
+
+def winvar(x, tr=.2):
+    """
+    Compute the gamma Winsorized variance for the data in the vector x.
+    tr is the amount of Winsorization which defaults to .2.
+    Nan values are removed.
+
+    :param x:
+    :param tr:
+    :return:
+    """
+
+    y=winsorize(x, limits=(tr,tr))
+    wv = np.var(y, ddof=1)
+
+    return wv
+
+def get_trimmed_mu_estimate(param, shape):
+
+    size=100000
+
+    if shape == 'normal':
+        mu=0
+
+    elif shape=='lognormal':
+        mu = trim_mean(lognorm.rvs(param, size=size), .2)
+
+    elif shape=='contaminated chi-squared':
+
+        data = chi2.rvs(4, size=size)
+        contam_inds=np.random.randint(size, size=int(param*size))
+        data[contam_inds] *= 10
+        mu=trim_mean(data, .2)
+
+    return mu
+
+def make_type_I_error_chart(results):
+
+    df = pd.DataFrame(results)
+    df['test'] = df['test'].replace({'t': 't-test', 'pb': 'trimmed percentile bootstrap', 'tt': 'trimmed t-test'})
+
+    bars=alt.Chart().mark_bar(tooltip=True, size=30).encode(
+        y=alt.Y('test', sort=['-x'], title='Type of test', axis=alt.Axis(titleFontSize=15, labelFontSize=12)),
+        x=alt.X('error', title='Estimated type I error', axis=alt.Axis(titleFontSize=15, labelFontSize=12)),
+        color=alt.Color('dist', title='Population shape', legend=alt.Legend(labelFontSize=12, titleFontSize=15))
+    )
+
+    text = alt.Chart().mark_text(dx=-15, dy=3).encode(
+        y=alt.Y('test', sort=['-x']),
+        x=alt.X('error', stack='zero'),
+        text=alt.Text('error', format='.3f')
+    )
+
+
+    return alt.layer(bars,text, data=df).properties(height=300)
