@@ -12,9 +12,9 @@ def read(path, encoding="utf-8"):
         return fp.read()
 
 setup(
-    name='hypothesize',
+    name='robust_statistics_simulator',
     version='0.1.dev1',
-    description='A Python package for comparing groups and measuring associations using robust statistics.',
+    description='Interactive simulations that demonstrate properties of robust statistics',
     author='Allan Campopiano',
     author_email="campopianoa@hcdsb.org",
     license='BSD 3-clause',
