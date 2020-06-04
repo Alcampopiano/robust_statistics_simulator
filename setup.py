@@ -1,7 +1,6 @@
 from setuptools import find_packages, setup
 import io
 import os
-import re
 
 def get_install_requirements(path):
     content = read(path)
@@ -14,7 +13,7 @@ def read(path, encoding="utf-8"):
 
 setup(
     name='hypothesize',
-    version='1.0.0',
+    version='0.1.dev1',
     description='A Python package for comparing groups and measuring associations using robust statistics.',
     author='Allan Campopiano',
     author_email="campopianoa@hcdsb.org",
@@ -27,7 +26,7 @@ setup(
     install_requires=get_install_requirements("requirements.txt"),
     python_requires=">=3.6",
     classifiers=[
-        "Development Status :: 5 - Production/Stable",
+        "Development Status :: 1 - Planning",
         "Environment :: Console",
         "Intended Audience :: Science/Research",
         "License :: OSI Approved :: BSD License",
