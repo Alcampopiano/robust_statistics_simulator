@@ -10,7 +10,8 @@ def make_population_widgets():
     slider = widgets.FloatSlider(min=0, max=3, step=.01, value=1, description='Sigma',
                                        style=dict(description_width='100px'), layout=dict(width='300px'))
 
-    dropdown = widgets.Dropdown(options=['normal', 'lognormal', 'contaminated chi-squared'], value='lognormal',
+    options=['normal', 'lognormal', 'contaminated chi-squared', 'exponential'] #'argus'
+    dropdown = widgets.Dropdown(options=options, value='lognormal',
                                       description='Shape',
                                       style=dict(description_width='100px'), layout=dict(width='300px'))
 
@@ -68,3 +69,17 @@ def make_type_I_error_widgets():
     button.layout = {'width': 'auto'}
 
     return {'output': output, 'slider': slider, 'button': button}
+
+def make_progress_widget():
+
+    prog=widgets.IntProgress(
+        value=0,
+        min=1,
+        max=21000,
+        step=1,
+        description='Simulating:',
+        bar_style='info',  # 'success', 'info', 'warning', 'danger' or ''
+        orientation='horizontal'
+    )
+
+    return {'progress': prog}

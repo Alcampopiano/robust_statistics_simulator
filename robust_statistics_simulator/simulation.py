@@ -1,3 +1,4 @@
+import numba
 import pandas as pd
 import altair as alt
 import numpy as np
@@ -5,17 +6,18 @@ from IPython.display import clear_output, display
 from ipywidgets import VBox, HBox
 import ipywidgets
 from scipy.stats.mstats import winsorize
-from scipy.stats import lognorm, norm, chi2, trim_mean, gaussian_kde, t
+from scipy.stats import argus, expon, lognorm, norm, chi2, trim_mean, gaussian_kde, t
 from robust_statistics_simulator.make_widgets import \
     make_population_widgets, make_sampling_distribution_widgets, \
     make_comparison_widgets, make_sampling_distribution_of_t_widgets, \
-    make_type_I_error_widgets
+    make_type_I_error_widgets, make_progress_widget
 
 population_widget_dict = make_population_widgets()
 sampling_distribution_widgets=make_sampling_distribution_widgets()
 comparison_widgets=make_comparison_widgets()
 t_sampling_distribution_widgets=make_sampling_distribution_of_t_widgets()
 type_I_error_widgets=make_type_I_error_widgets()
+progress_widget=make_progress_widget()['progress']
 
 def make_pdf(param, shape):
     
@@ -33,6 +35,8 @@ def make_pdf(param, shape):
 
     elif shape=='contaminated chi-squared':
 
+        # x = np.linspace(chi2.ppf(0.01, 4, 0, param), chi2.ppf(0.99, 4, 0, param), 1000)
+        # y = chi2.pdf(x, 4, 0, param)
         size=1000
         x = np.linspace(0, 13, size)
         chi_rand_values = chi2.rvs(4, size=size)
@@ -40,6 +44,8 @@ def make_pdf(param, shape):
         chi_rand_values[contam_inds] *= 10
         kernel=gaussian_kde(chi_rand_values)
         y=kernel.pdf(x)
+
+
 
         df = pd.DataFrame({'data': x, 'density': y})
 
@@ -49,7 +55,73 @@ def make_pdf(param, shape):
         y = t.pdf(x, param)
         df = pd.DataFrame({'data': x, 'density': y})
 
+    elif shape=='exponential':
+
+        x = np.linspace(expon.ppf(0.01, 0, param), expon.ppf(0.99, 0, param), 1000)
+        y = expon.pdf(x, 0, param)
+        df = pd.DataFrame({'data': x, 'density': y})
+
+    # elif shape=='argus':
+    #
+    #     chi=3
+    #     x = np.linspace(argus.ppf(0.01, chi, 0, param), argus.ppf(0.99, chi, 0, param), 1000)
+    #     y = argus.pdf(x, chi, 0, param)
+    #     df = pd.DataFrame({'data': x, 'density': y})
+
+
     return df
+
+def generate_random_data_from_dist(param, shape, nrows, ncols):
+
+    if shape=='normal':
+       data = norm.rvs(0, param, size=(nrows, ncols))
+
+    elif shape=='lognormal':
+        data = lognorm.rvs(param, size=(nrows, ncols))
+
+    elif shape=='contaminated chi-squared':
+
+        # data = chi2.rvs(4, 0, param, size=size)
+        data = chi2.rvs(4, size=(nrows, ncols))
+        contam_inds=np.random.randint(ncols, size=int(param*ncols))
+        data[:, contam_inds] *= 10
+
+    elif shape=='exponential':
+       data = expon.rvs(0, param, size=(nrows, ncols))
+
+    # elif shape=='argus':
+    #    chi=3
+    #    data = argus.rvs(chi, 0, param, size=size)
+
+
+    return data
+
+def get_population_average_estimate(param, shape):
+
+    size=100000
+
+    if shape=='normal':
+        mu=0
+
+    elif shape=='lognormal':
+        mu = lognorm.stats(param, moments='m')
+
+    elif shape=='contaminated chi-squared':
+
+        # mu = chi2.stats(4, 0, param, moments='m')
+        data = chi2.rvs(4, size=size)
+        contam_inds=np.random.randint(size, size=int(param*size))
+        data[contam_inds] *= 10
+        mu=np.mean(data)
+
+    elif shape=='exponential':
+       mu = expon.stats(0, param, moments='m')
+
+    # elif shape=='argus':
+    #    chi=3
+    #    mu = expon.stats(chi, 0, param, moments='m')
+
+    return mu
 
 def make_population_chart(df):
 
@@ -90,6 +162,11 @@ def popluation_dropdown_callback(widget_info):
     output=population_widget_dict['output']
 
     if dropdown.value=='contaminated chi-squared':
+        # slider.description = 'Sigma'
+        # slider.min=0
+        # slider.max = 3
+        # slider.value=1
+
         slider.description='Contamination'
         slider.min=0
         slider.max = .5
@@ -143,7 +220,7 @@ def sampling_distribution_button_callback(widget_info):
 
         sample=[]
         for i in range(1000):
-            data = generate_random_data_from_dist(population_slider.value, population_dropdown.value, sample_slider.value)
+            data = generate_random_data_from_dist(population_slider.value, population_dropdown.value, 1, sample_slider.value)
             est=sample_dropdown.value['func'](data) if not sample_dropdown.value.get('args') else \
                 sample_dropdown.value['func'](data, sample_dropdown.value['args'])
 
@@ -151,26 +228,6 @@ def sampling_distribution_button_callback(widget_info):
 
         display(make_sampling_distribution_chart(sample))
         label.value=f'SE = {np.std(sample, ddof=1).round(2)} based on the {population_dropdown.value} population'
-
-def generate_random_data_from_dist(param, shape, size):
-
-    if shape=='normal':
-       data = norm.rvs(0, param, size=size)
-
-    elif shape=='lognormal':
-        data = lognorm.rvs(param, size=size)
-
-    elif shape=='contaminated chi-squared':
-
-        ### this should be the building of the whole contaminated population
-        # then sample from it.
-        # should this be outside of this function or is there a mathematical equivalent to doing it like this
-        data = chi2.rvs(4, size=size)
-        contam_inds=np.random.randint(size, size=int(param*size))
-        data[contam_inds] *= 10
-
-
-    return data
 
 def make_sampling_distribution_chart(sample):
 
@@ -199,14 +256,16 @@ def comparison_button_callback(widget_info):
     output = comparison_widgets['output']
 
     sample_size=30
-    dists=['normal', 'lognormal', 'contaminated chi-squared']
+    dists=population_widget_dict['dropdown'].options
+    #params=[1,1,.1, 1, 1]
+    #['normal', 'lognormal', 'contaminated chi-squared', 'exponential']
+    params=[1, 1, .1, 1]
+
     estimators=[({'name': 'mean', 'func': np.mean}),
                 ({'name': 'trim_mean', 'func': trim_mean, 'args': .2}),
                 ({'name': 'median', 'func': np.median}),
-                ({'name': 'one-step', 'func': np.mean}),
                 ] # ({'name': 'variance', 'func': np.var})
 
-    params=[1,1,.1]
     results=[]
 
     with output:
@@ -216,9 +275,9 @@ def comparison_button_callback(widget_info):
             for est in estimators:
                 sample = []
                 for i in range(1000):
-                    data = generate_random_data_from_dist(param, dist, sample_size)
-                    est_val=est['func'](data) if not est.get('args') else \
-                        est['func'](data, est['args'])
+                    data = generate_random_data_from_dist(param, dist, 1, sample_size)
+                    est_val=est['func'](data, axis=1) if not est.get('args') else \
+                        est['func'](data, est['args'], axis=1)
 
                     sample.append(est_val)
 
@@ -230,11 +289,20 @@ def make_comparison_chart(results):
 
     df = pd.DataFrame(results)
 
-    c=alt.Chart(df).mark_bar(tooltip=True, size=30).encode(
+    bars=alt.Chart(df).mark_bar(tooltip=True, size=30).encode(
         y=alt.Y('est', title='Estimator', axis=alt.Axis(titleFontSize=15, labelFontSize=12)),
         x=alt.X('se', title='Standard error', axis=alt.Axis(titleFontSize=15, labelFontSize=12)),
         color=alt.Color('dist', title='Population shape', legend=alt.Legend(labelFontSize=12, titleFontSize=15))
-    ).properties(height=300)
+    )#.properties(height=300)
+
+    text = alt.Chart().mark_text(dx=-15, dy=3, color='white').encode(
+        y=alt.Y('est', sort=['-x']),
+        x=alt.X('sum(se)', stack='zero'),
+        detail='dist',
+        text=alt.Text('sum(se)', format='.2f')
+    )
+
+    return alt.layer(bars, text, data=df).properties(height=300)
 
 
     return c.interactive()
@@ -265,7 +333,7 @@ def t_sampling_distribution_button_callback(widget_info):
         sample=[]
         for i in range(1000):
             data = generate_random_data_from_dist(population_slider.value,
-                        population_dropdown.value, sample_slider.value)
+                        population_dropdown.value, 1, sample_slider.value)
 
             est=(np.sqrt(sample_slider.value)*(np.mean(data)-mu))/np.std(data, ddof=1)
             sample.append(est)
@@ -297,28 +365,6 @@ def make_sampling_distribution_of_t_chart(sample):
 
     return c.interactive()
 
-def get_population_average_estimate(param, shape):
-
-    size=100000
-
-    if shape=='normal':
-        mu=0
-
-    elif shape=='lognormal':
-        mu = lognorm.stats(param, moments='m')
-
-    elif shape=='contaminated chi-squared':
-
-        ### this should be the building of the whole contaminated population
-        # then sample from it.
-        # should this be outside of this function or is there a mathematical equivalent to doing it like this
-        data = chi2.rvs(4, size=size)
-        contam_inds=np.random.randint(size, size=int(param*size))
-        data[contam_inds] *= 10
-        mu=np.mean(data)
-
-    return mu
-
 def type_I_error():
 
     slider = type_I_error_widgets['slider']
@@ -327,6 +373,8 @@ def type_I_error():
 
     button.on_click(type_I_error_button_callback)
     comps_vbox = VBox([slider, button])
+    #comps_vbox = VBox([slider, button, progress_widget])
+
     display(HBox([comps_vbox, output]))
 
 def type_I_error_button_callback(widget_info):
@@ -334,75 +382,147 @@ def type_I_error_button_callback(widget_info):
     dropdown = population_widget_dict['dropdown']
     output = type_I_error_widgets['output']
     dists = dropdown.options
-    params = [1, 1, .1]
+    samp_size = type_I_error_widgets['slider'].value
+    #['normal', 'lognormal', 'contaminated chi-squared', 'exponential']
+    params = [1, 1, .1, 1]
 
     results = []
     with output:
         clear_output(wait=True)
 
         for param, dist in zip(params, dists):
-            error_rate=simulate_t_type_I_error(param, dist)
+            error_rate=simulate_t_type_I_error(param, dist, samp_size)
             results.append({'dist': dist, 'error': error_rate, 'test': 't'})
 
         for param, dist in zip(params, dists):
-            error_rate = simulate_tt_type_I_error(param, dist)
+            error_rate = simulate_tt_type_I_error(param, dist, samp_size)
             results.append({'dist': dist, 'error': error_rate, 'test': 'tt'})
 
         for param, dist in zip(params, dists):
-            error_rate = simulate_pb_type_I_error(param, dist)
+            error_rate = simulate_pb_type_I_error(param, dist, samp_size)
             results.append({'dist': dist, 'error': error_rate, 'test': 'pb'})
 
         display(make_type_I_error_chart(results))
         #print(results)
 
-def simulate_t_type_I_error(param, dist):
+def simulate_t_type_I_error(param, dist, samp_size):
 
     nsamples=10000
     mu = get_population_average_estimate(param, dist)
-    slider = type_I_error_widgets['slider']
+    data = generate_random_data_from_dist(param, dist, nsamples, samp_size) #nsamples x samp_size
+    tvals = (np.sqrt(samp_size) * (np.mean(data, axis=1) - mu)) / np.std(data, ddof=1, axis=1)
 
-    tvals=[]
-    for _ in range(nsamples):
+    # tvals=[]
+    # for _ in range(nsamples):
+    #
+    #     #data = generate_random_data_from_dist(param, dist, samp_size)
+    #     tval = (np.sqrt(samp_size) * (np.mean(data) - mu)) / np.std(data, ddof=1)
+    #     tvals.append(tval)
+    #     #progress_widget.value+=1
 
-        data = generate_random_data_from_dist(param, dist, slider.value)
-        tval = (np.sqrt(slider.value) * (np.mean(data) - mu)) / np.std(data, ddof=1)
-        tvals.append(tval)
-
-    t_crit = t.ppf(.975, slider.value - 1)
+    t_crit = t.ppf(.975, samp_size - 1)
     prob = (np.sum(tvals < -t_crit) + np.sum(tvals > t_crit)) / len(tvals)
 
     return prob
 
-def simulate_pb_type_I_error(param, dist):
+# @numba.jit(nopython=True)
+# def vendored_trim_mean(a, proportiontocut, axis=0):
+#
+#     a = np.asarray(a)
+#
+#     if a.size == 0:
+#         return np.nan
+#
+#     # if axis is None:
+#     #     a = a.ravel()
+#     #     axis = 0
+#
+#     nobs = a.shape[axis]
+#     lowercut = int(proportiontocut * nobs)
+#     uppercut = nobs - lowercut
+#
+#     if (lowercut > uppercut):
+#         raise ValueError("Proportion too big.")
+#
+#     atmp = np.partition(a, (lowercut, uppercut - 1), axis)
+#
+#     sl = [slice(None)] * atmp.ndim
+#     sl[axis] = slice(lowercut, uppercut)
+#     return np.mean(atmp[tuple(sl)], axis=axis)
 
-    slider = type_I_error_widgets['slider']
+# @numba.jit(nopython=True)
+# def percentile_bootstrap_tests(data, nboot, mu, samp_size):
+#
+#     l = round(.05 * nboot / 2) - 1
+#     u = nboot - l - 2
+#
+#     bools=[]
+#     for sample in data:
+#         bdat = np.random.choice(sample, size=(nboot, samp_size))
+#         #effects=trim_mean(bdat, .2, axis=1) - mu
+#
+#         effects=[]
+#         for row in bdat:
+#             effects.append(np.mean(row) - mu)
+#
+#         #effects = np.mean(bdat, 1) - mu
+#         up = sorted(effects)[u]
+#         low = sorted(effects)[l]
+#         # up = np.sort(effects)[u]
+#         # low = np.sort(effects)[l]
+#         bools.append((low < 0 < up))
+#
+#     arr_bools=np.array(bools)
+#     #prob = 1 - (np.sum(bools) / len(bools))
+#     prob = 1 - (np.sum(arr_bools) / len(arr_bools))
+#
+#     return prob
+
+def simulate_pb_type_I_error(param, dist, samp_size):
+
     nboot = 599
-    bools = []
+    nreplications=1000
+    l = round(.05 * nboot / 2) - 1
+    u = nboot - l - 2
     mu = get_trimmed_mu_estimate(param, dist)
 
-    for _ in range(1000):
-        effects = []
-        data = generate_random_data_from_dist(param, dist, slider.value)
+    data = generate_random_data_from_dist(param, dist, nreplications, samp_size)
+    #prob=percentile_bootstrap_tests(data, nboot, mu, samp_size)
 
-        for _ in range(nboot):
-            bdat = np.random.choice(data, slider.value)
-            effects.append(trim_mean(bdat, .2) - mu)
-
-        l = round(.05 * nboot / 2) - 1
-        u = nboot - l - 2
-        up = sorted(effects)[u]
-        low = sorted(effects)[l]
+    bools=[]
+    for sample in data:
+        bdat = np.random.choice(sample, size=(nboot, samp_size))
+        effects=trim_mean(bdat, .2, axis=1) - mu
+        up = np.sort(effects)[u]
+        low = np.sort(effects)[l]
         bools.append((low < 0 < up))
+
+    # for _ in range(1000):
+    #     effects = []
+    #     #data = generate_random_data_from_dist(param, dist, samp_size)
+    #
+    #     for _ in range(nboot):
+    #         bdat = np.random.choice(data, samp_size)
+    #         effects.append(trim_mean(bdat, .2) - mu)
+    #
+    #     l = round(.05 * nboot / 2) - 1
+    #     u = nboot - l - 2
+    #     up = sorted(effects)[u]
+    #     low = sorted(effects)[l]
+    #     bools.append((low < 0 < up))
+    #     #progress_widget.value+=1
+
 
     prob = 1 - (np.sum(bools) / len(bools))
 
     return prob
 
-def simulate_tt_type_I_error(param, dist):
+#@numba.jit(nopython=True)
+def simulate_tt_type_I_error(param, dist, samp_size):
 
     nsamples=10000
     crit_nsamples=100000
-    n = type_I_error_widgets['slider'].value
+    n = samp_size #type_I_error_widgets['slider'].value
     g=int(.2*n)
     df = n - 2 * g - 1
     ts=np.sort(t.rvs(df, size=crit_nsamples))
@@ -412,20 +532,24 @@ def simulate_tt_type_I_error(param, dist):
     low = ts[l]
 
     mu = get_trimmed_mu_estimate(param, dist)
+    data = generate_random_data_from_dist(param, dist, nsamples, n)
+    t_stat = (1 - 2 * .2) * np.sqrt(n) * (trim_mean(data, .2, axis=1) - mu) / np.sqrt(winvar(data, axis=1))
+    #bools=(t_stat < low or t_stat > up)
+    bools=(t_stat < low) | (t_stat > up)
 
-    bools=[]
-    for _ in range(nsamples):
-
-        data = generate_random_data_from_dist(param, dist, n)
-        t_stat=(1-2*.2)*np.sqrt(n)*(trim_mean(data, .2) - mu) / np.sqrt(winvar(data))
-        bools.append((t_stat < low or t_stat > up))
-
+    # bools=[]
+    # for _ in range(nsamples):
+    #
+    #     data = generate_random_data_from_dist(param, dist, n)
+    #     t_stat=(1-2*.2)*np.sqrt(n)*(trim_mean(data, .2) - mu) / np.sqrt(winvar(data))
+    #     bools.append((t_stat < low or t_stat > up))
+    #     #progress_widget.value+=1
 
     prob = np.sum(bools) / len(bools)
 
     return prob
 
-def winvar(x, tr=.2):
+def winvar(x, tr=.2, axis=0):
     """
     Compute the gamma Winsorized variance for the data in the vector x.
     tr is the amount of Winsorization which defaults to .2.
@@ -436,11 +560,12 @@ def winvar(x, tr=.2):
     :return:
     """
 
-    y=winsorize(x, limits=(tr,tr))
-    wv = np.var(y, ddof=1)
+    y=winsorize(x, limits=(tr,tr), axis=axis)
+    wv = np.var(y, ddof=1, axis=axis)
 
     return wv
 
+#@numba.jit(nopython=True)
 def get_trimmed_mu_estimate(param, shape):
 
     size=100000
@@ -458,6 +583,9 @@ def get_trimmed_mu_estimate(param, shape):
         data[contam_inds] *= 10
         mu=trim_mean(data, .2)
 
+    elif shape=='exponential':
+        mu = trim_mean(expon.rvs(0, param, size=size), .2)
+
     return mu
 
 def make_type_I_error_chart(results):
@@ -471,10 +599,11 @@ def make_type_I_error_chart(results):
         color=alt.Color('dist', title='Population shape', legend=alt.Legend(labelFontSize=12, titleFontSize=15))
     )
 
-    text = alt.Chart().mark_text(dx=-15, dy=3).encode(
+    text = alt.Chart().mark_text(dx=-15, dy=3, color='white').encode(
         y=alt.Y('test', sort=['-x']),
-        x=alt.X('error', stack='zero'),
-        text=alt.Text('error', format='.3f')
+        x=alt.X('sum(error)', stack='zero'),
+        detail='dist',
+        text=alt.Text('sum(error)', format='.3f')
     )
 
 
