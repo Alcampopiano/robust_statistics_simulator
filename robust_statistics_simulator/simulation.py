@@ -407,6 +407,7 @@ def type_I_error_button_callback(widget_info):
 
 def simulate_t_type_I_error(param, dist, samp_size):
 
+    print('here')
     nsamples=10000
     mu = get_population_average_estimate(param, dist)
     data = generate_random_data_from_dist(param, dist, nsamples, samp_size) #nsamples x samp_size
@@ -487,7 +488,6 @@ def simulate_pb_type_I_error(param, dist, samp_size):
     mu = get_trimmed_mu_estimate(param, dist)
 
     data = generate_random_data_from_dist(param, dist, nreplications, samp_size)
-    #prob=percentile_bootstrap_tests(data, nboot, mu, samp_size)
 
     bools=[]
     for sample in data:
@@ -497,32 +497,15 @@ def simulate_pb_type_I_error(param, dist, samp_size):
         low = np.sort(effects)[l]
         bools.append((low < 0 < up))
 
-    # for _ in range(1000):
-    #     effects = []
-    #     #data = generate_random_data_from_dist(param, dist, samp_size)
-    #
-    #     for _ in range(nboot):
-    #         bdat = np.random.choice(data, samp_size)
-    #         effects.append(trim_mean(bdat, .2) - mu)
-    #
-    #     l = round(.05 * nboot / 2) - 1
-    #     u = nboot - l - 2
-    #     up = sorted(effects)[u]
-    #     low = sorted(effects)[l]
-    #     bools.append((low < 0 < up))
-    #     #progress_widget.value+=1
-
-
     prob = 1 - (np.sum(bools) / len(bools))
 
     return prob
 
-#@numba.jit(nopython=True)
 def simulate_tt_type_I_error(param, dist, samp_size):
 
     nsamples=10000
     crit_nsamples=100000
-    n = samp_size #type_I_error_widgets['slider'].value
+    n = samp_size
     g=int(.2*n)
     df = n - 2 * g - 1
     ts=np.sort(t.rvs(df, size=crit_nsamples))
@@ -533,39 +516,37 @@ def simulate_tt_type_I_error(param, dist, samp_size):
 
     mu = get_trimmed_mu_estimate(param, dist)
     data = generate_random_data_from_dist(param, dist, nsamples, n)
-    t_stat = (1 - 2 * .2) * np.sqrt(n) * (trim_mean(data, .2, axis=1) - mu) / np.sqrt(winvar(data, axis=1))
-    #bools=(t_stat < low or t_stat > up)
-    bools=(t_stat < low) | (t_stat > up)
 
-    # bools=[]
-    # for _ in range(nsamples):
-    #
-    #     data = generate_random_data_from_dist(param, dist, n)
-    #     t_stat=(1-2*.2)*np.sqrt(n)*(trim_mean(data, .2) - mu) / np.sqrt(winvar(data))
-    #     bools.append((t_stat < low or t_stat > up))
-    #     #progress_widget.value+=1
+    t_stat = (1 - 2 * .2) * np.sqrt(n) * (trim_mean(data, .2, axis=1) - mu) / np.sqrt(winvar(data, axis=1))
+
+    bools=(t_stat < low) | (t_stat > up)
 
     prob = np.sum(bools) / len(bools)
 
     return prob
 
-def winvar(x, tr=.2, axis=0):
-    """
-    Compute the gamma Winsorized variance for the data in the vector x.
-    tr is the amount of Winsorization which defaults to .2.
-    Nan values are removed.
+# @numba.jit(nopython=True)
+# def my_trimmed_mean(data, percentile):
+#
+#     for i in range(data.shape[0]):
+#         data[i].sort()
+#
+#     low = int(percentile * data.shape[1])
+#     high = int((1. - percentile) * data.shape[1])
+#
+#     results=np.zeros(data.shape[0])
+#     for i in range(data.shape[0]):
+#         results[i]=np.mean(data[i, low:high])
+#
+#     return results
 
-    :param x:
-    :param tr:
-    :return:
-    """
+def winvar(x, tr=.2, axis=0):
 
     y=winsorize(x, limits=(tr,tr), axis=axis)
     wv = np.var(y, ddof=1, axis=axis)
 
     return wv
 
-#@numba.jit(nopython=True)
 def get_trimmed_mu_estimate(param, shape):
 
     size=100000
