@@ -11,7 +11,6 @@ For more information on robust methods please see Wilcox's book
 
 - [Tutorial](tutorial.md)
 - [Installation](install_dep.md)
-- [Basic Tutorial](basic_tutorial.md#)
 
 ## User Guide
 - [Distributions](distributions.md)

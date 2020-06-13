@@ -6,7 +6,7 @@ from IPython.display import clear_output, display
 from ipywidgets import VBox, HBox
 import ipywidgets
 from scipy.stats.mstats import winsorize
-from scipy.stats import argus, expon, lognorm, norm, chi2, trim_mean, gaussian_kde, t
+from scipy.stats import expon, lognorm, norm, chi2, trim_mean, gaussian_kde, t
 from robust_statistics_simulator.make_widgets import \
     make_population_widgets, make_sampling_distribution_widgets, \
     make_comparison_widgets, make_sampling_distribution_of_t_widgets, \
@@ -44,8 +44,6 @@ def make_pdf(param, shape):
         chi_rand_values[contam_inds] *= 10
         kernel=gaussian_kde(chi_rand_values)
         y=kernel.pdf(x)
-
-
 
         df = pd.DataFrame({'data': x, 'density': y})
 
