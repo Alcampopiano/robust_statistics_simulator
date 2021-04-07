@@ -10,7 +10,7 @@ def make_population_widgets():
     slider = widgets.FloatSlider(min=0, max=3, step=.01, value=1, description='Sigma',
                                        style=dict(description_width='100px'), layout=dict(width='300px'))
 
-    options=['normal', 'lognormal', 'contaminated chi-squared', 'exponential'] #'argus'
+    options=['normal', 'lognormal', 'contaminated chi-squared', 'contaminated normal', 'exponential']
     dropdown = widgets.Dropdown(options=options, value='lognormal',
                                       description='Shape',
                                       style=dict(description_width='100px'), layout=dict(width='300px'))

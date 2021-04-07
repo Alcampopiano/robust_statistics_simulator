@@ -19,6 +19,28 @@ t_sampling_distribution_widgets=make_sampling_distribution_of_t_widgets()
 type_I_error_widgets=make_type_I_error_widgets()
 progress_widget=make_progress_widget()['progress']
 
+def get_trimmed_mu_estimate(param, shape):
+
+    size=100000
+
+    if shape == 'normal' or shape=='contaminated normal':
+        mu=0
+
+    elif shape=='lognormal':
+        mu = trim_mean(lognorm.rvs(param, size=size), .2)
+
+    elif shape=='contaminated chi-squared':
+
+        data = chi2.rvs(4, size=size)
+        contam_inds=np.random.randint(size, size=int(param*size))
+        data[contam_inds] *= 10
+        mu=trim_mean(data, .2)
+
+    elif shape=='exponential':
+        mu = trim_mean(expon.rvs(0, param, size=size), .2)
+
+    return mu
+
 def make_pdf(param, shape):
     
     if shape=='normal':
@@ -59,6 +81,22 @@ def make_pdf(param, shape):
         y = expon.pdf(x, 0, param)
         df = pd.DataFrame({'data': x, 'density': y})
 
+    elif shape=='contaminated normal':
+
+        total_pop_size = 100000
+        sub_pop_size = round(param * total_pop_size)
+        norm_pop_size = int(total_pop_size - sub_pop_size)
+        standard_norm_values = norm.rvs(0, 1, size=norm_pop_size)
+        contam_values = norm.rvs(0, 10, size=sub_pop_size)
+        values = np.concatenate([standard_norm_values, contam_values])
+
+        x = np.linspace(-3, 3, 1000)
+        kernel = gaussian_kde(values)
+        y = kernel.pdf(x)
+
+        df = pd.DataFrame({'data': x, 'density': y})
+
+
     # elif shape=='argus':
     #
     #     chi=3
@@ -84,13 +122,19 @@ def generate_random_data_from_dist(param, shape, nrows, ncols):
         contam_inds=np.random.randint(ncols, size=int(param*ncols))
         data[:, contam_inds] *= 10
 
+    elif shape=='contaminated normal':
+
+        sub_size = round(param * ncols)
+        norm_size = int(ncols - sub_size)
+        standard_norm_values = norm.rvs(0, 1, size=(nrows, norm_size))
+        contam_values = norm.rvs(0, 10, size=(nrows, sub_size))
+        #print(standard_norm_values.shape)
+        #print(contam_values.shape)
+        data = np.concatenate([standard_norm_values, contam_values], axis=1)
+        #print(data.shape)
+
     elif shape=='exponential':
        data = expon.rvs(0, param, size=(nrows, ncols))
-
-    # elif shape=='argus':
-    #    chi=3
-    #    data = argus.rvs(chi, 0, param, size=size)
-
 
     return data
 
@@ -98,7 +142,7 @@ def get_population_average_estimate(param, shape):
 
     size=100000
 
-    if shape=='normal':
+    if shape=='normal' or shape=='contaminated normal':
         mu=0
 
     elif shape=='lognormal':
@@ -115,11 +159,70 @@ def get_population_average_estimate(param, shape):
     elif shape=='exponential':
        mu = expon.stats(0, param, moments='m')
 
-    # elif shape=='argus':
-    #    chi=3
-    #    mu = expon.stats(chi, 0, param, moments='m')
-
     return mu
+
+def popluation_dropdown_callback(widget_info):
+
+    dropdown=population_widget_dict['dropdown']
+    slider=population_widget_dict['slider']
+    output=population_widget_dict['output']
+
+    if dropdown.value=='contaminated chi-squared' or dropdown.value=='contaminated normal':
+        # slider.description = 'Sigma'
+        # slider.min=0
+        # slider.max = 3
+        # slider.value=1
+
+        slider.description='Contamination'
+        slider.min=0
+        slider.max = .5
+        slider.value=.1
+
+    else:
+        slider.description = 'Sigma'
+        slider.min=0
+        slider.max = 3
+        slider.value=1
+
+    with output:
+        clear_output(wait=True)
+        df=make_pdf(slider.value, dropdown.value)
+        display(make_population_chart(df))
+
+def comparison_button_callback(widget_info):
+
+    output = comparison_widgets['output']
+
+    sample_size=30
+    dists=population_widget_dict['dropdown'].options
+    #params=[1,1,.1, 1, 1]
+    #['normal', 'lognormal', 'contaminated chi-squared', 'contaminated normal', 'exponential']
+    params=[1, 1, .1, .1, 1]
+
+    estimators=[({'name': 'mean', 'func': np.mean}),
+                ({'name': 'trim_mean', 'func': trim_mean, 'args': .2}),
+                ({'name': 'median', 'func': np.median}),
+                ] # ({'name': 'variance', 'func': np.var})
+
+    results=[]
+
+    with output:
+        clear_output(wait=True)
+
+        for param, dist in zip(params, dists):
+            for est in estimators:
+                sample = []
+                for i in range(1000):
+                    data = generate_random_data_from_dist(param, dist, 1, sample_size)
+                    est_val=est['func'](data, axis=1) if not est.get('args') else \
+                        est['func'](data, est['args'], axis=1)
+
+                    #print(type(est_val))
+                    sample.append(est_val)
+
+                results.append({'dist': dist, 'est': est['name'], 'se': np.std(sample, ddof=1)})
+
+        display(make_comparison_chart(results))
 
 def make_population_chart(df):
 
@@ -152,34 +255,6 @@ def population():
 
     comps_vbox=VBox([dropdown, slider])
     display(HBox([comps_vbox, output]))
-
-def popluation_dropdown_callback(widget_info):
-
-    dropdown=population_widget_dict['dropdown']
-    slider=population_widget_dict['slider']
-    output=population_widget_dict['output']
-
-    if dropdown.value=='contaminated chi-squared':
-        # slider.description = 'Sigma'
-        # slider.min=0
-        # slider.max = 3
-        # slider.value=1
-
-        slider.description='Contamination'
-        slider.min=0
-        slider.max = .5
-        slider.value=.1
-
-    else:
-        slider.description = 'Sigma'
-        slider.min=0
-        slider.max = 3
-        slider.value=1
-
-    with output:
-        clear_output(wait=True)
-        df=make_pdf(slider.value, dropdown.value)
-        display(make_population_chart(df))
 
 def popluation_slider_callback(widget_info):
 
@@ -219,9 +294,12 @@ def sampling_distribution_button_callback(widget_info):
         sample=[]
         for i in range(1000):
             data = generate_random_data_from_dist(population_slider.value, population_dropdown.value, 1, sample_slider.value)
+            #print(data[0])
             est=sample_dropdown.value['func'](data) if not sample_dropdown.value.get('args') else \
-                sample_dropdown.value['func'](data, sample_dropdown.value['args'])
+                sample_dropdown.value['func'](np.squeeze(data), sample_dropdown.value['args'])
+                #trim_mean(data, .2, axis=0)
 
+            #print(est)
             sample.append(est)
 
         display(make_sampling_distribution_chart(sample))
@@ -229,7 +307,9 @@ def sampling_distribution_button_callback(widget_info):
 
 def make_sampling_distribution_chart(sample):
 
+    #print(type(sample[0]))
     df=pd.DataFrame({'data': sample})
+    #print(df.head())
 
     c=alt.Chart(df).transform_density('data', as_=['data', 'density']).mark_area().encode(
         x=alt.X('data', axis=alt.Axis(titleFontSize=15)),
@@ -249,61 +329,39 @@ def comparisons():
     #comps_vbox = VBox([dropdown, slider, button, label])
     display(HBox([button, output]))
 
-def comparison_button_callback(widget_info):
-
-    output = comparison_widgets['output']
-
-    sample_size=30
-    dists=population_widget_dict['dropdown'].options
-    #params=[1,1,.1, 1, 1]
-    #['normal', 'lognormal', 'contaminated chi-squared', 'exponential']
-    params=[1, 1, .1, 1]
-
-    estimators=[({'name': 'mean', 'func': np.mean}),
-                ({'name': 'trim_mean', 'func': trim_mean, 'args': .2}),
-                ({'name': 'median', 'func': np.median}),
-                ] # ({'name': 'variance', 'func': np.var})
-
-    results=[]
-
-    with output:
-        clear_output(wait=True)
-
-        for param, dist in zip(params, dists):
-            for est in estimators:
-                sample = []
-                for i in range(1000):
-                    data = generate_random_data_from_dist(param, dist, 1, sample_size)
-                    est_val=est['func'](data, axis=1) if not est.get('args') else \
-                        est['func'](data, est['args'], axis=1)
-
-                    sample.append(est_val)
-
-                results.append({'dist': dist, 'est': est['name'], 'se': np.std(sample, ddof=1)})
-
-        display(make_comparison_chart(results))
-
 def make_comparison_chart(results):
 
     df = pd.DataFrame(results)
 
-    bars=alt.Chart(df).mark_bar(tooltip=True, size=30).encode(
-        y=alt.Y('est', title='Estimator', axis=alt.Axis(titleFontSize=15, labelFontSize=12)),
-        x=alt.X('se', title='Standard error', axis=alt.Axis(titleFontSize=15, labelFontSize=12)),
-        color=alt.Color('dist', title='Population shape', legend=alt.Legend(labelFontSize=12, titleFontSize=15))
-    )#.properties(height=300)
+    # bars=alt.Chart(df).mark_bar(tooltip=True, size=30).encode(
+    #     y=alt.Y('est', title='Estimator', axis=alt.Axis(titleFontSize=15, labelFontSize=12)),
+    #     x=alt.X('se', title='Standard error', axis=alt.Axis(titleFontSize=15, labelFontSize=12)),
+    #     color=alt.Color('dist', title='Population shape', legend=alt.Legend(labelFontSize=12, titleFontSize=15))
+    # )#.properties(height=300)
+    #
+    # text = alt.Chart().mark_text(dx=-15, dy=3, color='white').encode(
+    #     y=alt.Y('est', sort=['-x']),
+    #     x=alt.X('sum(se)', stack='zero'),
+    #     detail='dist',
+    #     text=alt.Text('sum(se)', format='.2f')
+    # )
 
-    text = alt.Chart().mark_text(dx=-15, dy=3, color='white').encode(
-        y=alt.Y('est', sort=['-x']),
-        x=alt.X('sum(se)', stack='zero'),
-        detail='dist',
-        text=alt.Text('sum(se)', format='.2f')
+    bars=alt.Chart().mark_rect(tooltip=True).encode(
+        y=alt.Y('est', title='Estimator', axis=alt.Axis(titleFontSize=18, labelFontSize=15)),
+        x=alt.X('dist', title='Population shape', axis=alt.Axis(titleFontSize=18, labelFontSize=15)),
+        color=alt.Color('se', title='Standard error')
     )
 
-    return alt.layer(bars, text, data=df).properties(height=300)
+    text = alt.Chart().mark_text(tooltip=True, color='black', size=15).encode(
+        y=alt.Y('est', title='Estimator',),
+        x=alt.X('dist', title='Population shape'),
+        text=alt.Text('se', format='.3f', title='Standard error')
+    )
+
+    return alt.layer(bars, text, data=df).properties(height=220, width=400).configure_scale(bandPaddingInner=0)
 
 
-    return c.interactive()
+    #return c.interactive()
 
 def t_sampling_distribution():
 
@@ -353,13 +411,13 @@ def make_sampling_distribution_of_t_chart(sample):
         y=alt.Y('density:Q', axis=alt.Axis(titleFontSize=15)),
     )
 
-    assumed=alt.Chart(df_assumed).mark_line(color='red').encode(
+    assumed=alt.Chart(df_assumed).mark_line(color='lightgrey').encode(
         x=alt.X('data', title='T',
                 axis=alt.Axis(titleFontSize=15)),
         y=alt.Y('density', axis=alt.Axis(titleFontSize=15)),
     )
 
-    c=alt.layer(actual, assumed)
+    c=alt.layer(assumed, actual)
 
     return c.interactive()
 
@@ -381,8 +439,8 @@ def type_I_error_button_callback(widget_info):
     output = type_I_error_widgets['output']
     dists = dropdown.options
     samp_size = type_I_error_widgets['slider'].value
-    #['normal', 'lognormal', 'contaminated chi-squared', 'exponential']
-    params = [1, 1, .1, 1]
+    #['normal', 'lognormal', 'contaminated chi-squared', 'contaminated normal', 'exponential']
+    params = [1, 1, .1, .1, 1]
 
     results = []
     with output:
@@ -405,7 +463,7 @@ def type_I_error_button_callback(widget_info):
 
 def simulate_t_type_I_error(param, dist, samp_size):
 
-    print('here')
+    #print('here')
     nsamples=10000
     mu = get_population_average_estimate(param, dist)
     data = generate_random_data_from_dist(param, dist, nsamples, samp_size) #nsamples x samp_size
@@ -545,45 +603,22 @@ def winvar(x, tr=.2, axis=0):
 
     return wv
 
-def get_trimmed_mu_estimate(param, shape):
-
-    size=100000
-
-    if shape == 'normal':
-        mu=0
-
-    elif shape=='lognormal':
-        mu = trim_mean(lognorm.rvs(param, size=size), .2)
-
-    elif shape=='contaminated chi-squared':
-
-        data = chi2.rvs(4, size=size)
-        contam_inds=np.random.randint(size, size=int(param*size))
-        data[contam_inds] *= 10
-        mu=trim_mean(data, .2)
-
-    elif shape=='exponential':
-        mu = trim_mean(expon.rvs(0, param, size=size), .2)
-
-    return mu
-
 def make_type_I_error_chart(results):
 
     df = pd.DataFrame(results)
     df['test'] = df['test'].replace({'t': 't-test', 'pb': 'trimmed percentile bootstrap', 'tt': 'trimmed t-test'})
 
-    bars=alt.Chart().mark_bar(tooltip=True, size=30).encode(
-        y=alt.Y('test', sort=['-x'], title='Type of test', axis=alt.Axis(titleFontSize=15, labelFontSize=12)),
-        x=alt.X('error', title='Estimated type I error', axis=alt.Axis(titleFontSize=15, labelFontSize=12)),
-        color=alt.Color('dist', title='Population shape', legend=alt.Legend(labelFontSize=12, titleFontSize=15))
+    bars=alt.Chart().mark_rect(tooltip=True).encode(
+        y=alt.Y('test', title='Type of test', axis=alt.Axis(titleFontSize=18, labelFontSize=15)),
+        x=alt.X('dist', title='Distribution', axis=alt.Axis(titleFontSize=18, labelFontSize=15)),
+        color=alt.Color('error', title='Estimated type I error')
     )
 
-    text = alt.Chart().mark_text(dx=-15, dy=3, color='white').encode(
-        y=alt.Y('test', sort=['-x']),
-        x=alt.X('sum(error)', stack='zero'),
-        detail='dist',
-        text=alt.Text('sum(error)', format='.3f')
+    text = alt.Chart().mark_text(tooltip=True, color='black', size=15).encode(
+        y=alt.Y('test', title='Type of test',),
+        x=alt.X('dist', title='Distribution'),
+        text=alt.Text('error', format='.3f', title='Estimated type I error')
     )
 
 
-    return alt.layer(bars,text, data=df).properties(height=300)
+    return alt.layer(bars,text, data=df).properties(height=220, width=400).configure_scale(bandPaddingInner=0)
