@@ -1,6 +1,6 @@
 import numpy as np
 import streamlit as st
-from simulation import make_pdf, make_population_chart, sampling_distribution_loop, \
+from funcs.simulation import make_pdf, make_population_chart, sampling_distribution_loop, \
     make_sampling_distribution_chart, make_comparison_chart, dists, est_dict, comparison_button_callback
 
 #######################################

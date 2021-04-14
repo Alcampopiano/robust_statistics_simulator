@@ -7,8 +7,7 @@ From the root of the cloned repository, please run:
 
 ```
 cd robust_statistics_simulator
-streamlit run robust_statistics_simulator/simulation
-
+streamlit run robust_statistics_simulator/simulation.py
 ```
 
 This repository is in its early stages.

@@ -3,22 +3,8 @@ import pandas as pd
 import altair as alt
 import numpy as np
 import streamlit as st
-# from IPython.display import clear_output, display
-# from ipywidgets import VBox, HBox
-# import ipywidgets
 from scipy.stats.mstats import winsorize
 from scipy.stats import expon, lognorm, norm, chi2, trim_mean, gaussian_kde, t
-# from robust_statistics_simulator.make_widgets import \
-#     make_population_widgets, make_sampling_distribution_widgets, \
-#     make_comparison_widgets, make_sampling_distribution_of_t_widgets, \
-#     make_type_I_error_widgets, make_progress_widget
-#
-# population_widget_dict = make_population_widgets()
-# sampling_distribution_widgets=make_sampling_distribution_widgets()
-# comparison_widgets=make_comparison_widgets()
-# t_sampling_distribution_widgets=make_sampling_distribution_of_t_widgets()
-# type_I_error_widgets=make_type_I_error_widgets()
-# progress_widget=make_progress_widget()['progress']
 
 dists=['normal', 'lognormal', 'contaminated chi-squared', 't', 'exponential', 'contaminated normal']
 est_dict = {'mean': np.mean,
