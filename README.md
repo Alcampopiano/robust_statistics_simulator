@@ -1,9 +1,15 @@
 # Robust Statistics Simulator
 
 An interactive Python package for demonstrating the basic concepts of robust statistics.
-This package relies heavily on ipython widgets to drive interactivity. Please see
-the relevant [set up instructions](https://ipywidgets.readthedocs.io/en/latest/user_install.html)
-for configuring ipython widgets.
+This package relies on Streamlit for interactivity.
+
+From the root of the cloned repository, please run:
+
+```
+cd robust_statistics_simulator
+streamlit run robust_statistics_simulator/simulation
+
+```
 
 This repository is in its early stages.
 

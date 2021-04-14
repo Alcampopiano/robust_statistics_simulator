@@ -1,23 +1,31 @@
-import numba
+#import numba
 import pandas as pd
 import altair as alt
 import numpy as np
-from IPython.display import clear_output, display
-from ipywidgets import VBox, HBox
-import ipywidgets
+import streamlit as st
+# from IPython.display import clear_output, display
+# from ipywidgets import VBox, HBox
+# import ipywidgets
 from scipy.stats.mstats import winsorize
 from scipy.stats import expon, lognorm, norm, chi2, trim_mean, gaussian_kde, t
-from robust_statistics_simulator.make_widgets import \
-    make_population_widgets, make_sampling_distribution_widgets, \
-    make_comparison_widgets, make_sampling_distribution_of_t_widgets, \
-    make_type_I_error_widgets, make_progress_widget
+# from robust_statistics_simulator.make_widgets import \
+#     make_population_widgets, make_sampling_distribution_widgets, \
+#     make_comparison_widgets, make_sampling_distribution_of_t_widgets, \
+#     make_type_I_error_widgets, make_progress_widget
+#
+# population_widget_dict = make_population_widgets()
+# sampling_distribution_widgets=make_sampling_distribution_widgets()
+# comparison_widgets=make_comparison_widgets()
+# t_sampling_distribution_widgets=make_sampling_distribution_of_t_widgets()
+# type_I_error_widgets=make_type_I_error_widgets()
+# progress_widget=make_progress_widget()['progress']
 
-population_widget_dict = make_population_widgets()
-sampling_distribution_widgets=make_sampling_distribution_widgets()
-comparison_widgets=make_comparison_widgets()
-t_sampling_distribution_widgets=make_sampling_distribution_of_t_widgets()
-type_I_error_widgets=make_type_I_error_widgets()
-progress_widget=make_progress_widget()['progress']
+dists=['normal', 'lognormal', 'contaminated chi-squared', 't', 'exponential', 'contaminated normal']
+est_dict = {'mean': np.mean,
+              'trim_mean': {'func': trim_mean, 'args': .2},
+              'median': np.median,
+              'one-step': np.mean,
+              'variance': np.var}
 
 def get_trimmed_mu_estimate(param, shape):
 
@@ -41,6 +49,7 @@ def get_trimmed_mu_estimate(param, shape):
 
     return mu
 
+@st.cache(show_spinner=False)
 def make_pdf(param, shape):
     
     if shape=='normal':
@@ -112,6 +121,10 @@ def generate_random_data_from_dist(param, shape, nrows, ncols):
     if shape=='normal':
        data = norm.rvs(0, param, size=(nrows, ncols))
 
+    # link the two sliders and make the param for t dfs (yolked to sample size in other slider)
+    # elif shape=='t':
+    #     data = t.rvs(df=ncols-1)
+
     elif shape=='lognormal':
         data = lognorm.rvs(param, size=(nrows, ncols))
 
@@ -161,68 +174,39 @@ def get_population_average_estimate(param, shape):
 
     return mu
 
-def popluation_dropdown_callback(widget_info):
-
-    dropdown=population_widget_dict['dropdown']
-    slider=population_widget_dict['slider']
-    output=population_widget_dict['output']
-
-    if dropdown.value=='contaminated chi-squared' or dropdown.value=='contaminated normal':
-        # slider.description = 'Sigma'
-        # slider.min=0
-        # slider.max = 3
-        # slider.value=1
-
-        slider.description='Contamination'
-        slider.min=0
-        slider.max = .5
-        slider.value=.1
-
-    else:
-        slider.description = 'Sigma'
-        slider.min=0
-        slider.max = 3
-        slider.value=1
-
-    with output:
-        clear_output(wait=True)
-        df=make_pdf(slider.value, dropdown.value)
-        display(make_population_chart(df))
-
-def comparison_button_callback(widget_info):
-
-    output = comparison_widgets['output']
+#@st.cache(show_spinner=False)
+def comparison_button_callback():
 
     sample_size=30
-    dists=population_widget_dict['dropdown'].options
-    #params=[1,1,.1, 1, 1]
     #['normal', 'lognormal', 'contaminated chi-squared', 'contaminated normal', 'exponential']
-    params=[1, 1, .1, .1, 1]
-
-    estimators=[({'name': 'mean', 'func': np.mean}),
-                ({'name': 'trim_mean', 'func': trim_mean, 'args': .2}),
-                ({'name': 'median', 'func': np.median}),
-                ] # ({'name': 'variance', 'func': np.var})
+    params_for_sim=[1., 1., 0.1, 0.1, 1.] # add t eventually
+    exclude_est='variance'
+    exclude_dist='t'
+    dists_for_sim={i for i in dists if i != exclude_dist}
+    ests_for_sim={k: est_dict[k] for k in est_dict if k != exclude_est}
 
     results=[]
+    for param, dist in zip(params_for_sim, dists_for_sim):
+        print(dist)
+        for est_key, est_val in ests_for_sim.items():
+            sample = []
+            for i in range(1000):
+                data = generate_random_data_from_dist(param, dist, 1, sample_size)
 
-    with output:
-        clear_output(wait=True)
+                try:
+                    func=est_val.get('func')
+                    arg=est_val.get('args')
+                    est_res=func(data, arg, axis=1)
 
-        for param, dist in zip(params, dists):
-            for est in estimators:
-                sample = []
-                for i in range(1000):
-                    data = generate_random_data_from_dist(param, dist, 1, sample_size)
-                    est_val=est['func'](data, axis=1) if not est.get('args') else \
-                        est['func'](data, est['args'], axis=1)
+                except:
+                    func=est_val
+                    est_res=func(data, axis=1)
 
-                    #print(type(est_val))
-                    sample.append(est_val)
+                sample.append(est_res)
 
-                results.append({'dist': dist, 'est': est['name'], 'se': np.std(sample, ddof=1)})
+            results.append({'dist': dist, 'est': est_key, 'se': np.std(sample, ddof=1)})
 
-        display(make_comparison_chart(results))
+    return results
 
 def make_population_chart(df):
 
@@ -233,77 +217,50 @@ def make_population_chart(df):
         
     return c.interactive()
 
-def population():
+# def sampling_distribution_button_callback(widget_info):
+#
+#     population_dropdown = population_widget_dict['dropdown']
+#     sample_dropdown = sampling_distribution_widgets['dropdown']
+#     sample_slider = sampling_distribution_widgets['slider']
+#     population_slider = population_widget_dict['slider']
+#     output = sampling_distribution_widgets['output']
+#     label = sampling_distribution_widgets['label']
+#
+#     with output:
+#         clear_output(wait=True)
+#
+#         sample=[]
+#         for i in range(1000):
+#             data = generate_random_data_from_dist(population_slider.value, population_dropdown.value, 1, sample_slider.value)
+#             #print(data[0])
+#             est=sample_dropdown.value['func'](data) if not sample_dropdown.value.get('args') else \
+#                 sample_dropdown.value['func'](np.squeeze(data), sample_dropdown.value['args'])
+#                 #trim_mean(data, .2, axis=0)
+#
+#             #print(est)
+#             sample.append(est)
+#
+#         display(make_sampling_distribution_chart(sample))
+#         label.value=f'SE = {np.std(sample, ddof=1).round(2)} based on the {population_dropdown.value} population'
 
-    dropdown = population_widget_dict['dropdown']
-    slider = population_widget_dict['slider']
-    output=population_widget_dict['output']
+@st.cache(show_spinner=False)
+def sampling_distribution_loop(est_param, scale_param, shape_param, samp_param):
 
-    slider.observe(popluation_slider_callback, names='value')
-    dropdown.observe(popluation_dropdown_callback, names='value') # dropdown.observe(update_population, names='value')
+    sample=[]
+    for i in range(1000):
+        data = generate_random_data_from_dist(int(scale_param), shape_param, 1, samp_param)
 
-    with output:
-        clear_output(wait=True)
-        df = make_pdf(slider.value, dropdown.value)
-        display(make_population_chart(df))
+        est_func=est_dict[est_param]
 
+        if type(est_func) is dict:
+            est=est_func['func'](np.squeeze(data), est_func['args'])
 
-    # box_layout = widgets.Layout(display='flex',
-    #                             flex_flow='row',
-    #                             align_items='center',
-    #                             )
+        else:
+            est=est_func(data)
 
-    comps_vbox=VBox([dropdown, slider])
-    display(HBox([comps_vbox, output]))
+        sample.append(est)
 
-def popluation_slider_callback(widget_info):
-
-    dropdown = population_widget_dict['dropdown']
-    slider = population_widget_dict['slider']
-    output=population_widget_dict['output']
-
-    with output:
-        clear_output(wait=True)
-        df=make_pdf(slider.value, dropdown.value)
-        display(make_population_chart(df))
-
-def sampling_distribution():
-
-    dropdown = sampling_distribution_widgets['dropdown']
-    slider = sampling_distribution_widgets['slider']
-    output = sampling_distribution_widgets['output']
-    button = sampling_distribution_widgets['button']
-    label = sampling_distribution_widgets['label']
-
-    button.on_click(sampling_distribution_button_callback)
-    comps_vbox=VBox([dropdown, slider, button, label])
-    display(HBox([comps_vbox, output]))
-
-def sampling_distribution_button_callback(widget_info):
-
-    population_dropdown = population_widget_dict['dropdown']
-    sample_dropdown = sampling_distribution_widgets['dropdown']
-    sample_slider = sampling_distribution_widgets['slider']
-    population_slider = population_widget_dict['slider']
-    output = sampling_distribution_widgets['output']
-    label = sampling_distribution_widgets['label']
-
-    with output:
-        clear_output(wait=True)
-
-        sample=[]
-        for i in range(1000):
-            data = generate_random_data_from_dist(population_slider.value, population_dropdown.value, 1, sample_slider.value)
-            #print(data[0])
-            est=sample_dropdown.value['func'](data) if not sample_dropdown.value.get('args') else \
-                sample_dropdown.value['func'](np.squeeze(data), sample_dropdown.value['args'])
-                #trim_mean(data, .2, axis=0)
-
-            #print(est)
-            sample.append(est)
-
-        display(make_sampling_distribution_chart(sample))
-        label.value=f'SE = {np.std(sample, ddof=1).round(2)} based on the {population_dropdown.value} population'
+    return sample
 
 def make_sampling_distribution_chart(sample):
 
@@ -317,17 +274,6 @@ def make_sampling_distribution_chart(sample):
     )
 
     return c.interactive()
-
-def comparisons():
-
-    output = comparison_widgets['output']
-    button = comparison_widgets['button']
-
-    button.on_click(comparison_button_callback)
-    #comps_vbox = VBox([button, output])
-    #display(comps_vbox)
-    #comps_vbox = VBox([dropdown, slider, button, label])
-    display(HBox([button, output]))
 
 def make_comparison_chart(results):
 
@@ -358,49 +304,27 @@ def make_comparison_chart(results):
         text=alt.Text('se', format='.3f', title='Standard error')
     )
 
-    return alt.layer(bars, text, data=df).properties(height=220, width=400).configure_scale(bandPaddingInner=0)
+    #properties(height=220, width=400)
+    return alt.layer(bars, text, data=df).properties(height=500, width=600).configure_scale(bandPaddingInner=0)
 
+@st.cache(show_spinner=False)
+def t_sampling_distribution_loop(scale_param, shape_param, samp_param):
 
-    #return c.interactive()
+    mu = get_population_average_estimate(scale_param, shape_param)
 
-def t_sampling_distribution():
+    sample=[]
+    for i in range(1000):
+        data = generate_random_data_from_dist(scale_param,
+                    shape_param, 1, samp_param)
 
-    slider = t_sampling_distribution_widgets['slider']
-    output = t_sampling_distribution_widgets['output']
-    button = t_sampling_distribution_widgets['button']
+        est=(np.sqrt(samp_param)*(np.mean(data)-mu))/np.std(data, ddof=1)
+        sample.append(est)
 
-    button.on_click(t_sampling_distribution_button_callback)
-    comps_vbox = VBox([slider, button])
-    display(HBox([comps_vbox, output]))
+    return sample
 
-def t_sampling_distribution_button_callback(widget_info):
+def make_sampling_distribution_of_t_chart(sample, samp_param):
 
-    population_dropdown = population_widget_dict['dropdown']
-    sample_slider = t_sampling_distribution_widgets['slider']
-    population_slider = population_widget_dict['slider']
-    output = t_sampling_distribution_widgets['output']
-
-    mu=get_population_average_estimate(population_slider.value,
-                population_dropdown.value)
-
-    with output:
-        clear_output(wait=True)
-
-        sample=[]
-        for i in range(1000):
-            data = generate_random_data_from_dist(population_slider.value,
-                        population_dropdown.value, 1, sample_slider.value)
-
-            est=(np.sqrt(sample_slider.value)*(np.mean(data)-mu))/np.std(data, ddof=1)
-            sample.append(est)
-
-        display(make_sampling_distribution_of_t_chart(sample))
-        #print(sample[:20])
-
-def make_sampling_distribution_of_t_chart(sample):
-
-    sample_slider = t_sampling_distribution_widgets['slider']
-    freedom=sample_slider.value-1
+    freedom=samp_param-1
     df_assumed = make_pdf(freedom, 't')
     df_actual=pd.DataFrame({'actual': sample})
 
@@ -421,45 +345,29 @@ def make_sampling_distribution_of_t_chart(sample):
 
     return c.interactive()
 
-def type_I_error():
+def type_I_error_button_callback():
 
-    slider = type_I_error_widgets['slider']
-    output = type_I_error_widgets['output']
-    button = type_I_error_widgets['button']
-
-    button.on_click(type_I_error_button_callback)
-    comps_vbox = VBox([slider, button])
-    #comps_vbox = VBox([slider, button, progress_widget])
-
-    display(HBox([comps_vbox, output]))
-
-def type_I_error_button_callback(widget_info):
-
-    dropdown = population_widget_dict['dropdown']
-    output = type_I_error_widgets['output']
-    dists = dropdown.options
-    samp_size = type_I_error_widgets['slider'].value
+    sample_size=30
+    params_for_sim=[1., 1., 0.1, 0.1, 1.]
+    exclude_dist='t'
     #['normal', 'lognormal', 'contaminated chi-squared', 'contaminated normal', 'exponential']
-    params = [1, 1, .1, .1, 1]
+    dists_for_sim={i for i in dists if i != exclude_dist}
 
     results = []
-    with output:
-        clear_output(wait=True)
 
-        for param, dist in zip(params, dists):
-            error_rate=simulate_t_type_I_error(param, dist, samp_size)
-            results.append({'dist': dist, 'error': error_rate, 'test': 't'})
+    for param, dist in zip(params_for_sim, dists_for_sim):
+        error_rate=simulate_t_type_I_error(param, dist, sample_size)
+        results.append({'dist': dist, 'error': error_rate, 'test': 't'})
 
-        for param, dist in zip(params, dists):
-            error_rate = simulate_tt_type_I_error(param, dist, samp_size)
-            results.append({'dist': dist, 'error': error_rate, 'test': 'tt'})
+    for param, dist in zip(params_for_sim, dists_for_sim):
+        error_rate = simulate_tt_type_I_error(param, dist, sample_size)
+        results.append({'dist': dist, 'error': error_rate, 'test': 'tt'})
 
-        for param, dist in zip(params, dists):
-            error_rate = simulate_pb_type_I_error(param, dist, samp_size)
-            results.append({'dist': dist, 'error': error_rate, 'test': 'pb'})
+    for param, dist in zip(params_for_sim, dists_for_sim):
+        error_rate = simulate_pb_type_I_error(param, dist, sample_size)
+        results.append({'dist': dist, 'error': error_rate, 'test': 'pb'})
 
-        display(make_type_I_error_chart(results))
-        #print(results)
+    return results
 
 def simulate_t_type_I_error(param, dist, samp_size):
 
@@ -538,17 +446,30 @@ def simulate_t_type_I_error(param, dist, samp_size):
 def simulate_pb_type_I_error(param, dist, samp_size):
 
     nboot = 599
-    nreplications=1000
+    # nreplications=1000
     l = round(.05 * nboot / 2) - 1
     u = nboot - l - 2
     mu = get_trimmed_mu_estimate(param, dist)
 
-    data = generate_random_data_from_dist(param, dist, nreplications, samp_size)
+    # data = generate_random_data_from_dist(param, dist, nreplications, samp_size)
+    #
+    # bools=[]
+    # for sample in data:
+    #     bdat = np.random.choice(sample, size=(nboot, samp_size))
+    #     effects=trim_mean(bdat, .2, axis=1) - mu
+    #     up = np.sort(effects)[u]
+    #     low = np.sort(effects)[l]
+    #     bools.append((low < 0 < up))
+    #
+    # prob = 1 - (np.sum(bools) / len(bools))
+
+    #############
 
     bools=[]
-    for sample in data:
-        bdat = np.random.choice(sample, size=(nboot, samp_size))
-        effects=trim_mean(bdat, .2, axis=1) - mu
+    for i in range(500):
+        data = generate_random_data_from_dist(param, dist, 1, samp_size)
+        bdat = np.random.choice(data[0], size=(nboot, samp_size))
+        effects = trim_mean(bdat, .2, axis=1) - mu
         up = np.sort(effects)[u]
         low = np.sort(effects)[l]
         bools.append((low < 0 < up))
@@ -559,25 +480,48 @@ def simulate_pb_type_I_error(param, dist, samp_size):
 
 def simulate_tt_type_I_error(param, dist, samp_size):
 
-    nsamples=10000
-    crit_nsamples=100000
-    n = samp_size
-    g=int(.2*n)
-    df = n - 2 * g - 1
-    ts=np.sort(t.rvs(df, size=crit_nsamples))
-    l = round(.05 * crit_nsamples / 2) - 1
-    u = crit_nsamples - l - 2
-    up = ts[u]
-    low = ts[l]
-
+    # nsamples=10000
+    # crit_nsamples=100000
+    # n = samp_size
+    # g=int(.2*n)
+    # df = n - 2 * g - 1
+    # ts=np.sort(t.rvs(df, size=crit_nsamples))
+    # l = round(.05 * crit_nsamples / 2) - 1
+    # u = crit_nsamples - l - 2
+    # up = ts[u]
+    # low = ts[l]
+    #
     mu = get_trimmed_mu_estimate(param, dist)
-    data = generate_random_data_from_dist(param, dist, nsamples, n)
+    # data = generate_random_data_from_dist(param, dist, nsamples, n)
+    #
+    # t_stat = (1 - 2 * .2) * np.sqrt(n) * (trim_mean(data, .2, axis=1) - mu) / np.sqrt(winvar(data, axis=1))
+    #
+    # bools=(t_stat < low) | (t_stat > up)
+    #
+    # prob = np.sum(bools) / len(bools)
 
-    t_stat = (1 - 2 * .2) * np.sqrt(n) * (trim_mean(data, .2, axis=1) - mu) / np.sqrt(winvar(data, axis=1))
+    #####################
+    nboot = 599
+    l=round(.025 * nboot)
+    u=round(.975 * nboot)
 
-    bools=(t_stat < low) | (t_stat > up)
+    bools=[]
+    for i in range(100):
+        data = generate_random_data_from_dist(param, dist, 1, samp_size)
 
-    prob = np.sum(bools) / len(bools)
+        bdat = np.random.choice(data[0], size=(nboot, samp_size))
+        t_stat = (trim_mean(bdat, .2, axis=1) - mu) / (winvar(bdat, axis=1)) / (0.6 * np.sqrt(samp_size))
+        sorted_t_stat=np.sort(t_stat)
+        Tlow = sorted_t_stat[l]
+        Tup = sorted_t_stat[u]
+        CI_low=mu - (Tup * (winvar(data[0])) / (0.6 * np.sqrt(samp_size)))
+        CI_up= mu - (Tlow * (winvar(data[0])) / (0.6 * np.sqrt(samp_size)))
+
+        bools.append((CI_low < mu < CI_up))
+
+    #prob = np.sum(bools) / len(bools)
+
+    prob = 1 - (np.sum(bools) / len(bools))
 
     return prob
 
@@ -606,19 +550,18 @@ def winvar(x, tr=.2, axis=0):
 def make_type_I_error_chart(results):
 
     df = pd.DataFrame(results)
-    df['test'] = df['test'].replace({'t': 't-test', 'pb': 'trimmed percentile bootstrap', 'tt': 'trimmed t-test'})
+    df['test'] = df['test'].replace({'t': 't-test', 'pb': 'percentile bootstrap', 'tt': 'bootstrap t-test'})
 
     bars=alt.Chart().mark_rect(tooltip=True).encode(
-        y=alt.Y('test', title='Type of test', axis=alt.Axis(titleFontSize=18, labelFontSize=15)),
-        x=alt.X('dist', title='Distribution', axis=alt.Axis(titleFontSize=18, labelFontSize=15)),
+        x=alt.X('test', title='Type of test', axis=alt.Axis(titleFontSize=18, labelFontSize=15, labelAngle=-45)),
+        y=alt.Y('dist', title='Distribution', axis=alt.Axis(titleFontSize=18, labelFontSize=15)),
         color=alt.Color('error', title='Estimated type I error')
     )
 
     text = alt.Chart().mark_text(tooltip=True, color='black', size=15).encode(
-        y=alt.Y('test', title='Type of test',),
-        x=alt.X('dist', title='Distribution'),
+        x=alt.X('test', title='Type of test',),
+        y=alt.Y('dist', title='Distribution'),
         text=alt.Text('error', format='.3f', title='Estimated type I error')
     )
 
-
-    return alt.layer(bars,text, data=df).properties(height=220, width=400).configure_scale(bandPaddingInner=0)
+    return alt.layer(bars,text, data=df).properties(height=500, width=600).configure_scale(bandPaddingInner=0)
