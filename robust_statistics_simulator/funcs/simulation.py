@@ -164,11 +164,15 @@ def get_population_average_estimate(param, shape):
 def comparison_button_callback():
 
     sample_size=30
-    #['normal', 'lognormal', 'contaminated chi-squared', 'contaminated normal', 'exponential']
-    params_for_sim=[1., 1., 0.1, 0.1, 1.] # add t eventually
     exclude_est='variance'
-    exclude_dist='t'
-    dists_for_sim={i for i in dists if i != exclude_dist}
+    #exclude_dist='t'
+
+    # dists and params are hard coded here since their paired order really matters
+    # I tried pulling from global dists but after removing t (which I may not need to do eventually),
+    # the pairing with the parmas and dists got messed up
+    params_for_sim=[1., 1., 0.1, 0.1, 1.] # add t eventually
+    dists_for_sim=['normal', 'lognormal', 'contaminated chi-squared', 'contaminated normal', 'exponential']
+    #dists_for_sim=[i for i in dists if i != exclude_dist]
     ests_for_sim={k: est_dict[k] for k in est_dict if k != exclude_est}
 
     results=[]
@@ -178,15 +182,14 @@ def comparison_button_callback():
             sample = []
             for i in range(1000):
                 data = generate_random_data_from_dist(param, dist, 1, sample_size)
-
-                try:
+                if type(est_val) is dict:
                     func=est_val.get('func')
                     arg=est_val.get('args')
-                    est_res=func(data, arg, axis=1)
+                    est_res=func(data.squeeze(), arg)
 
-                except:
+                else:
                     func=est_val
-                    est_res=func(data, axis=1)
+                    est_res=func(data.squeeze())
 
                 sample.append(est_res)
 
@@ -234,7 +237,7 @@ def sampling_distribution_loop(est_param, scale_param, shape_param, samp_param):
 
     sample=[]
     for i in range(1000):
-        data = generate_random_data_from_dist(int(scale_param), shape_param, 1, samp_param)
+        data = generate_random_data_from_dist(scale_param, shape_param, 1, samp_param)
 
         est_func=est_dict[est_param]
 
