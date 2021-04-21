@@ -1,5 +1,5 @@
 import streamlit as st
-from robust_statistics_simulator.simulation import make_pdf, make_population_chart, dists, make_sampling_distribution_of_t_chart, \
+from funcs.simulation import make_pdf, make_population_chart, dists, make_sampling_distribution_of_t_chart, \
     t_sampling_distribution_loop, make_type_I_error_chart, type_I_error_button_callback
 
 #######################################
