@@ -519,18 +519,20 @@ def make_type_I_error_chart(results):
 
     df = pd.DataFrame(results)
 
-    bars=alt.Chart().mark_bar(tooltip=True, size=30).encode(
+    bars=alt.Chart().mark_bar(size=30).encode(
         y=alt.Y('test:N', title='Type of test', axis=alt.Axis(titleFontSize=18, labelFontSize=15)),
         x=alt.X('sum(error):Q', title='Probability of Type I error', axis=alt.Axis(titleFontSize=18, labelFontSize=15), stack='zero'),
         color=alt.Color('direction:N', legend=alt.Legend(title=None)),
-        order = alt.Order('direction:N')
+        order = alt.Order('direction:N'),
+        tooltip = alt.Tooltip(['test', 'direction', 'error'])
     )
 
-    text = alt.Chart().mark_text(tooltip=True, color='black', size=15, dx=-20).encode(
+    text = alt.Chart().mark_text(color='black', size=15, dx=-20).encode(
         y=alt.Y('test:N', title='Type of test',),
         x=alt.X('error:Q', title='Probability of Type I error', stack='zero'),
         text=alt.Text('error:Q', format='.3f'),
-        order=alt.Order('direction:N')
+        order=alt.Order('direction:N'),
+        tooltip=alt.Tooltip(['test', 'direction', 'error'])
     )
 
     return alt.layer(bars,text, data=df).properties(height=300, width=600)
