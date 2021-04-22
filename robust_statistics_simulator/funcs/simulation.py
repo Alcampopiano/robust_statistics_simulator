@@ -334,33 +334,6 @@ def make_sampling_distribution_of_t_chart(sample, samp_param):
 
     return c.interactive()
 
-# def type_I_error_button_callback():
-#
-#     sample_size=30
-#
-#     # dists and params are hard coded here since their paired order really matters
-#     # I tried pulling from global dists but after removing t,
-#     # the pairing with the parmas and dists got messed up
-#     params_for_sim=[1., 1., 0.1, 0.1, 1.]
-#     dists_for_sim=['normal', 'lognormal', 'contaminated chi-squared', 'contaminated normal', 'exponential']
-#     #['normal', 'lognormal', 'contaminated chi-squared', 'contaminated normal', 'exponential']
-#
-#     results = []
-#
-#     for param, dist in zip(params_for_sim, dists_for_sim):
-#         error_rate=simulate_t_type_I_error(param, dist, sample_size)
-#         results.append({'dist': dist, 'error': error_rate, 'test': 't'})
-#
-#     for param, dist in zip(params_for_sim, dists_for_sim):
-#         error_rate = simulate_tt_type_I_error(param, dist, sample_size)
-#         results.append({'dist': dist, 'error': error_rate, 'test': 'tt'})
-#
-#     for param, dist in zip(params_for_sim, dists_for_sim):
-#         error_rate = simulate_pb_type_I_error(param, dist, sample_size)
-#         results.append({'dist': dist, 'error': error_rate, 'test': 'pb'})
-#
-#     return results
-
 def type_I_error_button_callback(g, h):
 
     samp_size=12
