@@ -522,7 +522,7 @@ def make_type_I_error_chart(results):
     bars=alt.Chart().mark_bar(size=30).encode(
         y=alt.Y('test:N', title='Type of test', axis=alt.Axis(titleFontSize=18, labelFontSize=15)),
         x=alt.X('sum(error):Q', title='Probability of Type I error', axis=alt.Axis(titleFontSize=18, labelFontSize=15), stack='zero'),
-        color=alt.Color('direction:N', legend=alt.Legend(title=None)),
+        color=alt.Color('direction:N', legend=alt.Legend(title=None, labelFontSize=18)),
         order = alt.Order('direction:N'),
         tooltip = alt.Tooltip(['test', 'direction', 'error'])
     )
