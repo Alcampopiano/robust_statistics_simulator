@@ -334,50 +334,79 @@ def make_sampling_distribution_of_t_chart(sample, samp_param):
 
     return c.interactive()
 
-def type_I_error_button_callback():
+# def type_I_error_button_callback():
+#
+#     sample_size=30
+#
+#     # dists and params are hard coded here since their paired order really matters
+#     # I tried pulling from global dists but after removing t,
+#     # the pairing with the parmas and dists got messed up
+#     params_for_sim=[1., 1., 0.1, 0.1, 1.]
+#     dists_for_sim=['normal', 'lognormal', 'contaminated chi-squared', 'contaminated normal', 'exponential']
+#     #['normal', 'lognormal', 'contaminated chi-squared', 'contaminated normal', 'exponential']
+#
+#     results = []
+#
+#     for param, dist in zip(params_for_sim, dists_for_sim):
+#         error_rate=simulate_t_type_I_error(param, dist, sample_size)
+#         results.append({'dist': dist, 'error': error_rate, 'test': 't'})
+#
+#     for param, dist in zip(params_for_sim, dists_for_sim):
+#         error_rate = simulate_tt_type_I_error(param, dist, sample_size)
+#         results.append({'dist': dist, 'error': error_rate, 'test': 'tt'})
+#
+#     for param, dist in zip(params_for_sim, dists_for_sim):
+#         error_rate = simulate_pb_type_I_error(param, dist, sample_size)
+#         results.append({'dist': dist, 'error': error_rate, 'test': 'pb'})
+#
+#     return results
 
-    sample_size=30
-    params_for_sim=[1., 1., 0.1, 0.1, 1.]
-    exclude_dist='t'
-    #['normal', 'lognormal', 'contaminated chi-squared', 'contaminated normal', 'exponential']
-    dists_for_sim={i for i in dists if i != exclude_dist}
+def type_I_error_button_callback(g, h):
 
-    results = []
+    samp_size=12
+    #g=1
+    #h=0
+    population_data=sample_from_g_and_h_distribution(g,h, samp_size)
+    t_error_low, t_error_up=simulate_t_type_I_error(population_data, samp_size)
+    pb_error_low, pb_error_up=simulate_pb_type_I_error(population_data, samp_size)
 
-    for param, dist in zip(params_for_sim, dists_for_sim):
-        error_rate=simulate_t_type_I_error(param, dist, sample_size)
-        results.append({'dist': dist, 'error': error_rate, 'test': 't'})
-
-    for param, dist in zip(params_for_sim, dists_for_sim):
-        error_rate = simulate_tt_type_I_error(param, dist, sample_size)
-        results.append({'dist': dist, 'error': error_rate, 'test': 'tt'})
-
-    for param, dist in zip(params_for_sim, dists_for_sim):
-        error_rate = simulate_pb_type_I_error(param, dist, sample_size)
-        results.append({'dist': dist, 'error': error_rate, 'test': 'pb'})
+    results=[{'test': 't-test', 'error': t_error_low, 'direction': 'P(test_stat < .025 quantile)'},
+             {'test': 't-test', 'error': t_error_up, 'direction':  'P(test_stat > .975 quantile)'},
+             {'test': 'percentile boot', 'error': pb_error_low, 'direction':  'P(test_stat < .025 quantile)'},
+             {'test': 'percentile boot', 'error': pb_error_up, 'direction':  'P(test_stat > .975 quantile)'},
+             ]
 
     return results
 
-def simulate_t_type_I_error(param, dist, samp_size):
+def sample_from_g_and_h_distribution(g,h, samp_size):
+
+    # g=0
+    # h=0
+    Zs=generate_random_data_from_dist(1, 'normal', 10000, samp_size) #nsamples x samp_size
+
+    if g>0:
+        Xs=((np.exp(g*Zs)-1)/g) * np.exp(h*(Zs**2)/2)
+
+    else:
+        Xs=Zs*np.exp(h*(Zs**2)/2)
+
+    return Xs
+
+
+def simulate_t_type_I_error(data, samp_size): #param, dist, samp_size
 
     #print('here')
-    nsamples=10000
-    mu = get_population_average_estimate(param, dist)
-    data = generate_random_data_from_dist(param, dist, nsamples, samp_size) #nsamples x samp_size
+    #nsamples=10000
+    #mu = get_population_average_estimate(param, dist)
+    #data = generate_random_data_from_dist(param, dist, nsamples, samp_size) #nsamples x samp_size
+    mu=np.mean(data) # this is a scalar (overall average estimate of population)
     tvals = (np.sqrt(samp_size) * (np.mean(data, axis=1) - mu)) / np.std(data, ddof=1, axis=1)
 
-    # tvals=[]
-    # for _ in range(nsamples):
-    #
-    #     #data = generate_random_data_from_dist(param, dist, samp_size)
-    #     tval = (np.sqrt(samp_size) * (np.mean(data) - mu)) / np.std(data, ddof=1)
-    #     tvals.append(tval)
-    #     #progress_widget.value+=1
-
     t_crit = t.ppf(.975, samp_size - 1)
-    prob = (np.sum(tvals < -t_crit) + np.sum(tvals > t_crit)) / len(tvals)
+    prob_up = (np.sum(tvals >= t_crit)) / len(tvals)
+    prob_low = (np.sum(tvals <= -t_crit)) / len(tvals)
 
-    return prob
+    return prob_low, prob_up
 
 # @numba.jit(nopython=True)
 # def vendored_trim_mean(a, proportiontocut, axis=0):
@@ -432,87 +461,64 @@ def simulate_t_type_I_error(param, dist, samp_size):
 #
 #     return prob
 
-def simulate_pb_type_I_error(param, dist, samp_size):
+def simulate_pb_type_I_error(data, samp_size): #param, dist, samp_size
 
     nboot = 599
-    # nreplications=1000
     l = round(.05 * nboot / 2) - 1
     u = nboot - l - 2
-    mu = get_trimmed_mu_estimate(param, dist)
+    nrows, ncols=[data.shape[0], data.shape[1]]
 
-    # data = generate_random_data_from_dist(param, dist, nreplications, samp_size)
-    #
-    # bools=[]
-    # for sample in data:
-    #     bdat = np.random.choice(sample, size=(nboot, samp_size))
-    #     effects=trim_mean(bdat, .2, axis=1) - mu
-    #     up = np.sort(effects)[u]
-    #     low = np.sort(effects)[l]
-    #     bools.append((low < 0 < up))
-    #
-    # prob = 1 - (np.sum(bools) / len(bools))
+    # this is a scalar (overall trimmed average estimate of population)
+    mu=trim_mean(data.reshape(1, (nrows*ncols)).squeeze(), .2)
 
-    #############
-
-    bools=[]
-    for i in range(500):
-        data = generate_random_data_from_dist(param, dist, 1, samp_size)
-        bdat = np.random.choice(data[0], size=(nboot, samp_size))
+    #bools=[]
+    sig_ups=[]
+    sig_lows=[]
+    for i in data:
+        #data = generate_random_data_from_dist(param, dist, 1, samp_size)
+        bdat = np.random.choice(i, size=(nboot, samp_size)) #size=(nboot, samp_size)
         effects = trim_mean(bdat, .2, axis=1) - mu
         up = np.sort(effects)[u]
         low = np.sort(effects)[l]
-        bools.append((low < 0 < up))
 
-    prob = 1 - (np.sum(bools) / len(bools))
+        if low >= 0:
+            sig_lows.append(1)
 
-    return prob
+        elif up <=0:
+            sig_ups.append(1)
 
-def simulate_tt_type_I_error(param, dist, samp_size):
+        #bools.append((low < 0 < up))
 
-    # nsamples=10000
-    # crit_nsamples=100000
-    # n = samp_size
-    # g=int(.2*n)
-    # df = n - 2 * g - 1
-    # ts=np.sort(t.rvs(df, size=crit_nsamples))
-    # l = round(.05 * crit_nsamples / 2) - 1
-    # u = crit_nsamples - l - 2
-    # up = ts[u]
-    # low = ts[l]
-    #
-    mu = get_trimmed_mu_estimate(param, dist)
-    # data = generate_random_data_from_dist(param, dist, nsamples, n)
-    #
-    # t_stat = (1 - 2 * .2) * np.sqrt(n) * (trim_mean(data, .2, axis=1) - mu) / np.sqrt(winvar(data, axis=1))
-    #
-    # bools=(t_stat < low) | (t_stat > up)
-    #
-    # prob = np.sum(bools) / len(bools)
+    #prob = 1 - (np.sum(bools) / len(bools))
+    prob_low = (np.sum(sig_lows) / len(data))
+    prob_up = (np.sum(sig_ups) / len(data))
 
-    #####################
-    nboot = 599
-    l=round(.025 * nboot)
-    u=round(.975 * nboot)
+    return prob_low, prob_up
 
-    bools=[]
-    for i in range(100):
-        data = generate_random_data_from_dist(param, dist, 1, samp_size)
-
-        bdat = np.random.choice(data[0], size=(nboot, samp_size))
-        t_stat = (trim_mean(bdat, .2, axis=1) - mu) / (winvar(bdat, axis=1)) / (0.6 * np.sqrt(samp_size))
-        sorted_t_stat=np.sort(t_stat)
-        Tlow = sorted_t_stat[l]
-        Tup = sorted_t_stat[u]
-        CI_low=mu - (Tup * (winvar(data[0])) / (0.6 * np.sqrt(samp_size)))
-        CI_up= mu - (Tlow * (winvar(data[0])) / (0.6 * np.sqrt(samp_size)))
-
-        bools.append((CI_low < mu < CI_up))
-
-    #prob = np.sum(bools) / len(bools)
-
-    prob = 1 - (np.sum(bools) / len(bools))
-
-    return prob
+# def simulate_tt_type_I_error(param, dist, samp_size):
+#
+#     mu = get_trimmed_mu_estimate(param, dist)
+#     nboot = 599
+#     l=round(.025 * nboot)
+#     u=round(.975 * nboot)
+#
+#     bools=[]
+#     for i in range(100):
+#         data = generate_random_data_from_dist(param, dist, 1, samp_size)
+#
+#         bdat = np.random.choice(data[0], size=(nboot, samp_size))
+#         t_stat = (trim_mean(bdat, .2, axis=1) - mu) / (winvar(bdat, axis=1)) / (0.6 * np.sqrt(samp_size))
+#         sorted_t_stat=np.sort(t_stat)
+#         Tlow = sorted_t_stat[l]
+#         Tup = sorted_t_stat[u]
+#         CI_low=mu - (Tup * (winvar(data[0])) / (0.6 * np.sqrt(samp_size)))
+#         CI_up= mu - (Tlow * (winvar(data[0])) / (0.6 * np.sqrt(samp_size)))
+#
+#         bools.append((CI_low < mu < CI_up))
+#
+#     prob = 1 - (np.sum(bools) / len(bools))
+#
+#     return prob
 
 # @numba.jit(nopython=True)
 # def my_trimmed_mean(data, percentile):
@@ -539,18 +545,19 @@ def winvar(x, tr=.2, axis=0):
 def make_type_I_error_chart(results):
 
     df = pd.DataFrame(results)
-    df['test'] = df['test'].replace({'t': 't-test', 'pb': 'percentile bootstrap', 'tt': 'bootstrap t-test'})
 
-    bars=alt.Chart().mark_rect(tooltip=True).encode(
-        x=alt.X('test', title='Type of test', axis=alt.Axis(titleFontSize=18, labelFontSize=15, labelAngle=-45)),
-        y=alt.Y('dist', title='Distribution', axis=alt.Axis(titleFontSize=18, labelFontSize=15)),
-        color=alt.Color('error', title='Estimated type I error')
+    bars=alt.Chart().mark_bar(tooltip=True, size=30).encode(
+        y=alt.Y('test:N', title='Type of test', axis=alt.Axis(titleFontSize=18, labelFontSize=15)),
+        x=alt.X('sum(error):Q', title='Probability of Type I error', axis=alt.Axis(titleFontSize=18, labelFontSize=15), stack='zero'),
+        color=alt.Color('direction:N', legend=alt.Legend(title=None)),
+        order = alt.Order('direction:N')
     )
 
-    text = alt.Chart().mark_text(tooltip=True, color='black', size=15).encode(
-        x=alt.X('test', title='Type of test',),
-        y=alt.Y('dist', title='Distribution'),
-        text=alt.Text('error', format='.3f', title='Estimated type I error')
+    text = alt.Chart().mark_text(tooltip=True, color='black', size=15, dx=-20).encode(
+        y=alt.Y('test:N', title='Type of test',),
+        x=alt.X('error:Q', title='Probability of Type I error', stack='zero'),
+        text=alt.Text('error:Q', format='.3f'),
+        order=alt.Order('direction:N')
     )
 
-    return alt.layer(bars,text, data=df).properties(height=500, width=600).configure_scale(bandPaddingInner=0)
+    return alt.layer(bars,text, data=df).properties(height=300, width=600)
