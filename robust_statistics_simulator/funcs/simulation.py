@@ -5,6 +5,7 @@ import numpy as np
 import streamlit as st
 from scipy.stats.mstats import winsorize
 from scipy.stats import expon, lognorm, norm, chi2, trim_mean, gaussian_kde, t
+from scipy.integrate import quad
 
 dists=['normal', 'lognormal', 'contaminated chi-squared', 't', 'exponential', 'contaminated normal']
 est_dict = {'mean': np.mean,
@@ -337,11 +338,13 @@ def make_sampling_distribution_of_t_chart(sample, samp_param):
 def type_I_error_button_callback(g, h):
 
     samp_size=12
-    #g=1
+    #g=.8
     #h=0
-    population_data=sample_from_g_and_h_distribution(g,h, samp_size)
-    t_error_low, t_error_up=simulate_t_type_I_error(population_data, samp_size)
-    pb_error_low, pb_error_up=simulate_pb_type_I_error(population_data, samp_size)
+    sample_data=sample_from_g_and_h_distribution(g,h)
+    t_error_low, t_error_up=simulate_t_type_I_error(sample_data, samp_size, g, h)
+    #t_error_low + t_error_up
+    pb_error_low, pb_error_up=simulate_pb_type_I_error(sample_data, samp_size, g, h)
+    #print(pb_error_low + pb_error_up)
 
     results=[{'test': 't-test', 'error': t_error_low, 'direction': 'P(test_stat < .025 quantile)'},
              {'test': 't-test', 'error': t_error_up, 'direction':  'P(test_stat > .975 quantile)'},
@@ -351,11 +354,12 @@ def type_I_error_button_callback(g, h):
 
     return results
 
-def sample_from_g_and_h_distribution(g,h, samp_size):
+def sample_from_g_and_h_distribution(g,h):
 
     # g=0
     # h=0
-    Zs=generate_random_data_from_dist(1, 'normal', 10000, samp_size) #nsamples x samp_size
+    #Zs=generate_random_data_from_dist(1, 'normal', 100000, samp_size) #nsamples x samp_size
+    Zs=generate_random_data_from_dist(1, 'normal', 100000, 1) #nsamples x samp_size
 
     if g>0:
         Xs=((np.exp(g*Zs)-1)/g) * np.exp(h*(Zs**2)/2)
@@ -363,23 +367,43 @@ def sample_from_g_and_h_distribution(g,h, samp_size):
     else:
         Xs=Zs*np.exp(h*(Zs**2)/2)
 
-    return Xs
+    return Xs.squeeze()
 
+def simulate_t_type_I_error(data, samp_size, g, h): #param, dist, samp_size
 
-def simulate_t_type_I_error(data, samp_size): #param, dist, samp_size
-
-    #print('here')
-    #nsamples=10000
-    #mu = get_population_average_estimate(param, dist)
-    #data = generate_random_data_from_dist(param, dist, nsamples, samp_size) #nsamples x samp_size
-    mu=np.mean(data) # this is a scalar (overall average estimate of population)
-    tvals = (np.sqrt(samp_size) * (np.mean(data, axis=1) - mu)) / np.std(data, ddof=1, axis=1)
+    nboot=599
+    samples=np.random.choice(data.squeeze(), size=(nboot, samp_size))
+    mu=ghmean(g,h)
+    tvals = (np.sqrt(samp_size) * (np.mean(samples, axis=1) - mu)) / np.std(samples, ddof=1, axis=1)
 
     t_crit = t.ppf(.975, samp_size - 1)
     prob_up = (np.sum(tvals >= t_crit)) / len(tvals)
     prob_low = (np.sum(tvals <= -t_crit)) / len(tvals)
 
     return prob_low, prob_up
+
+def ghmean(g,h):
+
+    if h==0 and g>0:
+
+        val=(np.exp(g**2/2)-1) / g
+        #val2 = (1 - 2 * np.exp(g ** 2 / 2) + np.exp(2 * g ** 2)) / g ** 2
+        #val2 = val2 - val ** 2
+
+    elif h != 0 and g>0:
+        #val2=np.nan
+        if h<1:
+            val=(np.exp(g ** 2 / (2 * (1 - h))) - 1) / (g * np.sqrt(1 - h))
+
+        # elif 0 < h < .5:
+        #     val2 = (np.exp(2 * g ** 2 / (1 - 2 * h)) - 2 * np.exp(g ** 2 / (2 * (1 - 2 * h))) +
+        #           1) / (g ** 2 * np.sqrt(1 - 2 * h)) - (np.exp(g ** 2 / (2 * (1 - h))) - 1) ** 2 / (g ** 2 * (1 - h))
+
+    elif g==0:
+        val=0
+        #val2 = 1 / (1 - 2 * h) ** 1.5   #Headrick et al. (2008)
+
+    return val#, val2
 
 # @numba.jit(nopython=True)
 # def vendored_trim_mean(a, proportiontocut, axis=0):
@@ -434,22 +458,39 @@ def simulate_t_type_I_error(data, samp_size): #param, dist, samp_size
 #
 #     return prob
 
-def simulate_pb_type_I_error(data, samp_size): #param, dist, samp_size
+def ghtrim(g,h):
 
-    nboot = 599
+    tr=.2
+
+    if g==0:
+        val=0
+    elif g>0:
+        low=norm.ppf(tr)
+        up = -1 * low
+        val = quad(ftrim, low, up, args=(g,h))[0]
+        val = val / (1-2*tr)
+
+    return val
+
+def ftrim(z,g,h):
+    gz = (np.exp(g * z) - 1) * np.exp(h * z ** 2 / 2) / g
+    res= norm.pdf(z) * gz
+
+    return res
+
+def simulate_pb_type_I_error(data, samp_size, g, h): #param, dist, samp_size
+
+    nboot = 1000
+    nsims= 599
     l = round(.05 * nboot / 2) - 1
     u = nboot - l - 2
-    nrows, ncols=[data.shape[0], data.shape[1]]
+    mu = ghtrim(g, h)
 
-    # this is a scalar (overall trimmed average estimate of population)
-    mu=trim_mean(data.reshape(1, (nrows*ncols)).squeeze(), .2)
-
-    #bools=[]
     sig_ups=[]
     sig_lows=[]
-    for i in data:
-        #data = generate_random_data_from_dist(param, dist, 1, samp_size)
-        bdat = np.random.choice(i, size=(nboot, samp_size)) #size=(nboot, samp_size)
+    for s in range(nsims):
+        experiment_data = np.random.choice(data, size=samp_size)
+        bdat = np.random.choice(experiment_data, size=(nboot, samp_size))
         effects = trim_mean(bdat, .2, axis=1) - mu
         up = np.sort(effects)[u]
         low = np.sort(effects)[l]
@@ -460,11 +501,11 @@ def simulate_pb_type_I_error(data, samp_size): #param, dist, samp_size
         elif up <=0:
             sig_ups.append(1)
 
-        #bools.append((low < 0 < up))
+        # if (low>0 and up>0) or (low<0 and up<0):
+        #     print('found sig')
 
-    #prob = 1 - (np.sum(bools) / len(bools))
-    prob_low = (np.sum(sig_lows) / len(data))
-    prob_up = (np.sum(sig_ups) / len(data))
+    prob_low = (np.sum(sig_lows) / nsims)
+    prob_up = (np.sum(sig_ups) / nsims)
 
     return prob_low, prob_up
 

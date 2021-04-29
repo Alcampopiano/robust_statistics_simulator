@@ -29,7 +29,7 @@ st.write(c)
 st.title('Type I Error Estimates')
 st.markdown('<br>', unsafe_allow_html=True)
 g_param = st.slider('Skewness', 0.0, 1.0, 0.0, step=0.1)
-h_param = st.slider('Heaviness', 0.0, 1.0, 0.0, step=0.1)
+h_param = st.slider('Heaviness', 0.0, .9, 0.0, step=0.1)
 
 if st.button('Run simulations'):
     results=type_I_error_button_callback(g_param,h_param)
