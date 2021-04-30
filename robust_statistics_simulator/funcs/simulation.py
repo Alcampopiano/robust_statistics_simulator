@@ -371,7 +371,7 @@ def sample_from_g_and_h_distribution(g,h):
 
 def simulate_t_type_I_error(data, samp_size, g, h): #param, dist, samp_size
 
-    nboot=599
+    nboot=2000
     samples=np.random.choice(data.squeeze(), size=(nboot, samp_size))
     mu=ghmean(g,h)
     tvals = (np.sqrt(samp_size) * (np.mean(samples, axis=1) - mu)) / np.std(samples, ddof=1, axis=1)
@@ -481,7 +481,7 @@ def ftrim(z,g,h):
 def simulate_pb_type_I_error(data, samp_size, g, h): #param, dist, samp_size
 
     nboot = 1000
-    nsims= 599
+    nsims= 2000
     l = round(.05 * nboot / 2) - 1
     u = nboot - l - 2
     mu = ghtrim(g, h)
@@ -560,7 +560,7 @@ def make_type_I_error_chart(results):
 
     df = pd.DataFrame(results)
 
-    bars=alt.Chart().mark_bar(size=30).encode(
+    bars=alt.Chart(df).mark_bar(size=30).encode(
         y=alt.Y('test:N', title='Type of test', axis=alt.Axis(titleFontSize=18, labelFontSize=15)),
         x=alt.X('sum(error):Q', title='Probability of Type I error', axis=alt.Axis(titleFontSize=18, labelFontSize=15), stack='zero'),
         color=alt.Color('direction:N', legend=alt.Legend(title=None, labelFontSize=18, labelLimit=1000)),
@@ -568,12 +568,16 @@ def make_type_I_error_chart(results):
         tooltip = alt.Tooltip(['test', 'direction', 'error'])
     )
 
-    text = alt.Chart().mark_text(color='black', size=15, dx=-20).encode(
-        y=alt.Y('test:N', title='Type of test',),
-        x=alt.X('error:Q', title='Probability of Type I error', stack='zero'),
-        text=alt.Text('error:Q', format='.3f'),
-        order=alt.Order('direction:N'),
-        tooltip=alt.Tooltip(['test', 'direction', 'error'])
+    # text = alt.Chart().mark_text(color='black', size=15, dx=-20).encode(
+    #     y=alt.Y('test:N', title='Type of test',),
+    #     x=alt.X('error:Q', title='Probability of Type I error', stack='zero'),
+    #     text=alt.Text('error:Q', format='.3f'),
+    #     order=alt.Order('direction:N'),
+    #     tooltip=alt.Tooltip(['test', 'direction', 'error'])
+    # )
+
+    rule = alt.Chart(pd.DataFrame({'alpha': [.05]})).mark_rule(color='black').encode(
+        x='alpha'
     )
 
-    return alt.layer(bars,text, data=df).properties(height=300, width=600)
+    return alt.layer(bars,rule).properties(height=300, width=600)
