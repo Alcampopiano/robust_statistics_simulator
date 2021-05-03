@@ -4,15 +4,9 @@ import altair as alt
 import numpy as np
 import streamlit as st
 from scipy.stats.mstats import winsorize
-from scipy.stats import expon, lognorm, norm, chi2, trim_mean, gaussian_kde, t
+from scipy.stats import median_absolute_deviation, expon, lognorm, norm, chi2, trim_mean, gaussian_kde, t
 from scipy.integrate import quad
 
-dists=['normal', 'lognormal', 'contaminated chi-squared', 't', 'exponential', 'contaminated normal']
-est_dict = {'mean': np.mean,
-              'trim_mean': {'func': trim_mean, 'args': .2},
-              'median': np.median,
-              'one-step': np.mean,
-              'variance': np.var}
 
 def get_trimmed_mu_estimate(param, shape):
 
@@ -478,6 +472,31 @@ def ftrim(z,g,h):
 
     return res
 
+def one_step(x, bend=1.28):
+
+    """
+    Wilcox has option to use modified one-step as initial estimate
+    Here, median is used which is Wilcox's default
+
+    :param x:
+    :param bend:
+    :return:
+    """
+
+    x=np.array(x)
+    init_loc=np.median(x)
+    y = (x - init_loc) / median_absolute_deviation(x)
+    A = sum(hpsi(y, bend))
+    B = len(x[abs(y) <= bend])
+    onestep = np.median(x) + median_absolute_deviation(x) * A / B
+
+    return onestep
+
+def hpsi(x, bend=1.28):
+
+    hpsi_res=np.where(abs(x) <= bend, x, bend * np.sign(x))
+    return hpsi_res
+
 def simulate_pb_type_I_error(data, samp_size, g, h): #param, dist, samp_size
 
     nboot = 1000
@@ -581,3 +600,13 @@ def make_type_I_error_chart(results):
     )
 
     return alt.layer(bars,rule).properties(height=300, width=600)
+
+
+dists=['normal', 'lognormal', 'contaminated chi-squared', 'exponential', 'contaminated normal']
+#dists=['normal', 'lognormal', 'contaminated chi-squared', 't', 'exponential', 'contaminated normal']
+
+est_dict = {'mean': np.mean,
+              'trim_mean': {'func': trim_mean, 'args': .2},
+              'median': np.median,
+              'one-step': one_step,
+              'variance': np.var}
