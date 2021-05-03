@@ -240,7 +240,7 @@ def sampling_distribution_loop(est_param, scale_param, shape_param, samp_param):
             est=est_func['func'](np.squeeze(data), est_func['args'])
 
         else:
-            est=est_func(data)
+            est=est_func(data.squeeze())
 
         sample.append(est)
 
