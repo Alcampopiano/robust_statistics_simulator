@@ -13,7 +13,7 @@ def read(path, encoding="utf-8"):
 
 setup(
     name='robust_statistics_simulator',
-    version='0.1.dev1',
+    version='0.1.dev2',
     description='Interactive simulations that demonstrate properties of robust statistics',
     author='Allan Campopiano',
     author_email="campopianoa@hcdsb.org",
