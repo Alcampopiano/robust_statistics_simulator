@@ -23,7 +23,7 @@ est_param=st.selectbox('Estimator', list(est_dict.keys()))
 samp_param = st.slider('Choose sample size', 1, 100, 20, step=1)
 sample=sampling_distribution_loop(est_param, scale_param, shape_param, samp_param)
 c2=make_sampling_distribution_chart(sample)
-st.write(c2)
+st.altair_chart(c2)
 st.write(f'SE = {np.std(sample, ddof=1).round(2)} based on the {shape_param} population')
 
 st.title('SE Estimates by Shape and Estimator')
