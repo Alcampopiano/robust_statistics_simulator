@@ -277,19 +277,19 @@ def make_comparison_chart(results):
     # )
 
     bars=alt.Chart().mark_rect(tooltip=True).encode(
-        y=alt.Y('est', title='Estimator', axis=alt.Axis(titleFontSize=18, labelFontSize=15)),
-        x=alt.X('dist', title='Population shape', axis=alt.Axis(titleFontSize=18, labelFontSize=15)),
+        x=alt.X('est', title='Estimator', axis=alt.Axis(titleFontSize=18, labelFontSize=15)),
+        y=alt.Y('dist', title='Population shape', axis=alt.Axis(titleFontSize=18, labelFontSize=15)),
         color=alt.Color('se', title='Standard error')
     )
 
     text = alt.Chart().mark_text(tooltip=True, color='black', size=15).encode(
-        y=alt.Y('est', title='Estimator',),
-        x=alt.X('dist', title='Population shape'),
+        x=alt.X('est', title='Estimator',),
+        y=alt.Y('dist', title='Population shape'),
         text=alt.Text('se', format='.3f', title='Standard error')
     )
 
     #properties(height=220, width=400)
-    return alt.layer(bars, text, data=df).properties(height=500, width=600).configure_scale(bandPaddingInner=0)
+    return alt.layer(bars, text, data=df).properties(height=300, width=400).configure_scale(bandPaddingInner=0)
 
 @st.cache(show_spinner=False)
 def t_sampling_distribution_loop(scale_param, shape_param, samp_param):
@@ -340,10 +340,10 @@ def type_I_error_button_callback(g, h):
     pb_error_low, pb_error_up=simulate_pb_type_I_error(sample_data, samp_size, g, h)
     #print(pb_error_low + pb_error_up)
 
-    results=[{'test': 't-test', 'error': t_error_low, 'direction': 'P(test_stat < .025 quantile)'},
-             {'test': 't-test', 'error': t_error_up, 'direction':  'P(test_stat > .975 quantile)'},
-             {'test': 'percentile boot', 'error': pb_error_low, 'direction':  'P(test_stat < .025 quantile)'},
-             {'test': 'percentile boot', 'error': pb_error_up, 'direction':  'P(test_stat > .975 quantile)'},
+    results=[{'test': 't-test', 'error': t_error_low, 'direction': 'P(t < .025)'},
+             {'test': 't-test', 'error': t_error_up, 'direction':  'P(t > .975)'},
+             {'test': 'percentile boot', 'error': pb_error_low, 'direction':  'P(t < .025)'},
+             {'test': 'percentile boot', 'error': pb_error_up, 'direction':  'P(t > .975)'},
              ]
 
     return results
@@ -595,11 +595,11 @@ def make_type_I_error_chart(results):
     #     tooltip=alt.Tooltip(['test', 'direction', 'error'])
     # )
 
-    rule = alt.Chart(pd.DataFrame({'alpha': [.05]})).mark_rule(color='black').encode(
+    rule = alt.Chart(pd.DataFrame({'alpha': [.05]})).mark_rule(color='red').encode(
         x='alpha'
     )
 
-    return alt.layer(bars,rule).properties(height=300, width=600)
+    return alt.layer(bars,rule).properties(height=300, width=400)
 
 
 dists=['normal', 'lognormal', 'contaminated chi-squared', 'exponential', 'contaminated normal']
