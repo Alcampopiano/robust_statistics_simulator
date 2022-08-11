@@ -289,7 +289,7 @@ def make_comparison_chart(results):
     )
 
     #properties(height=220, width=400)
-    return alt.layer(bars, text, data=df).properties(height=300, width=400).configure_scale(bandPaddingInner=0)
+    return alt.layer(bars, text, data=df).properties(height=500, width=600).configure_scale(bandPaddingInner=0)
 
 @st.cache(show_spinner=False)
 def t_sampling_distribution_loop(scale_param, shape_param, samp_param):
@@ -599,7 +599,7 @@ def make_type_I_error_chart(results):
         x='alpha'
     )
 
-    return alt.layer(bars,rule).properties(height=300, width=400)
+    return alt.layer(bars,rule).properties(height=500, width=600)
 
 
 dists=['normal', 'lognormal', 'contaminated chi-squared', 'exponential', 'contaminated normal']
